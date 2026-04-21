@@ -1,5 +1,3 @@
-import { MoreVertical, Plus, X } from 'lucide-react';
-
 interface DockFooterProps {
   menuOpen: boolean;
   onShowAddSite: () => void;
@@ -8,7 +6,10 @@ interface DockFooterProps {
 }
 
 const buttonClassName =
-  'flex h-11 w-11 items-center justify-center text-white/78 transition-colors hover:bg-white/8 hover:text-white';
+  'flex h-[42px] w-11 items-center justify-center text-[22px] leading-none font-medium text-white/88 transition-colors hover:bg-white/8 hover:text-white';
+
+const edgeButtonClassName =
+  'flex h-[42px] w-11 items-center justify-center text-[26px] leading-none font-medium text-white/88 transition-colors hover:bg-white/8 hover:text-white';
 
 export function DockFooter({
   menuOpen,
@@ -17,27 +18,35 @@ export function DockFooter({
   onHideDock
 }: DockFooterProps): JSX.Element {
   return (
-    <div className="flex flex-col items-center pb-2">
-      <button
-        type="button"
-        className={buttonClassName}
-        title="添加网页"
-        onMouseEnter={onShowAddSite}
-        onClick={onShowAddSite}
-      >
-        <Plus size={18} strokeWidth={2.1} />
-      </button>
-      <button
-        type="button"
-        className={`${buttonClassName} ${menuOpen ? 'bg-white/8 text-white' : ''}`}
-        title="更多"
-        onClick={onToggleMenu}
-      >
-        <MoreVertical size={18} strokeWidth={2.1} />
-      </button>
-      <button type="button" className={buttonClassName} title="隐藏侧边栏" onClick={onHideDock}>
-        <X size={18} strokeWidth={2.1} />
-      </button>
+    <div className="flex w-full flex-col items-center gap-0 bg-dock px-0 pb-0.5 pt-0">
+      <div className="mb-3 mt-0.5 h-px w-8 bg-white/20" />
+      <div className="-mt-1 flex w-full flex-col items-center gap-0">
+        <button
+          type="button"
+          className={edgeButtonClassName}
+          title="添加网页"
+          onMouseEnter={onShowAddSite}
+          onClick={onShowAddSite}
+        >
+          <span aria-hidden="true">+</span>
+        </button>
+        <button
+          type="button"
+          className={`${buttonClassName} ${menuOpen ? 'bg-white/8 text-white' : ''}`}
+          title="更多"
+          onClick={onToggleMenu}
+        >
+          <span aria-hidden="true">⋮</span>
+        </button>
+        <button
+          type="button"
+          className={edgeButtonClassName}
+          title="隐藏侧边栏"
+          onClick={onHideDock}
+        >
+          <span aria-hidden="true">×</span>
+        </button>
+      </div>
     </div>
   );
 }

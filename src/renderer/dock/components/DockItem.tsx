@@ -48,10 +48,12 @@ export function DockItem({
   onContextMenu
 }: DockItemProps): JSX.Element {
   const [iconFailed, setIconFailed] = useState(false);
+  const [iconLoaded, setIconLoaded] = useState(false);
   const iconSrc = buildIconSrc(panel);
 
   useEffect(() => {
     setIconFailed(false);
+    setIconLoaded(false);
   }, [panel.id, panel.iconSource.path, panel.web?.url]);
 
   return (
@@ -72,21 +74,26 @@ export function DockItem({
       ) : null}
 
       <span className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-lg">
+        <span
+          className={`flex h-7 w-7 items-center justify-center rounded-lg text-xs font-semibold text-white ${
+            iconLoaded && !iconFailed ? 'hidden' : ''
+          }`}
+          style={{ backgroundColor: buildFallbackColor(panel) }}
+        >
+          {buildFallbackLabel(panel)}
+        </span>
         {iconSrc && !iconFailed ? (
           <img
             src={iconSrc}
             alt={panel.title}
-            className="h-7 w-7 object-cover"
-            onError={() => setIconFailed(true)}
+            className={`h-7 w-7 object-cover ${iconLoaded ? 'block' : 'hidden'}`}
+            onLoad={() => setIconLoaded(true)}
+            onError={() => {
+              setIconFailed(true);
+              setIconLoaded(false);
+            }}
           />
-        ) : (
-          <span
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-xs font-semibold text-white"
-            style={{ backgroundColor: buildFallbackColor(panel) }}
-          >
-            {buildFallbackLabel(panel)}
-          </span>
-        )}
+        ) : null}
       </span>
     </button>
   );

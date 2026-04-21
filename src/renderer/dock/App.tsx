@@ -138,7 +138,7 @@ export default function App(): JSX.Element {
 
   return (
     <main ref={rootRef} className="relative h-screen w-[44px] bg-dock text-white">
-      <div className="flex h-full flex-col justify-between">
+      <div className="absolute inset-x-0 top-0 bottom-[126px]">
         <DockIconList
           panels={panels}
           activePanelId={panelState.activePanelId}
@@ -146,7 +146,9 @@ export default function App(): JSX.Element {
           onActivate={(id) => void handleActivatePanel(id)}
           onContextMenu={handleContextMenu}
         />
+      </div>
 
+      <div className="absolute inset-x-0 bottom-0 z-10">
         <DockFooter
           menuOpen={menuOpen}
           onShowAddSite={handleShowBuiltinPlaceholder}

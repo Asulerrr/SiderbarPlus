@@ -17,8 +17,8 @@ export function DockIconList({
   onContextMenu
 }: DockIconListProps): JSX.Element {
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="hide-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+      <div className="hide-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto py-1">
         {panels.map((panel) => (
           <DockItem
             key={panel.id}

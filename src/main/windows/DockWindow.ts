@@ -17,6 +17,9 @@ export class DockWindow {
       ...bounds,
       frame: false,
       transparent: false,
+      hasShadow: false,
+      thickFrame: false,
+      roundedCorners: false,
       resizable: false,
       movable: false,
       fullscreenable: false,
@@ -39,7 +42,7 @@ export class DockWindow {
     this.window.once('ready-to-show', () => this.window?.showInactive());
 
     if (process.env.ELECTRON_RENDERER_URL) {
-      void this.window.loadURL(`${process.env.ELECTRON_RENDERER_URL}/src/renderer/dock/index.html`);
+      void this.window.loadURL(`${process.env.ELECTRON_RENDERER_URL}/dock/index.html`);
     } else {
       void this.window.loadFile(join(__dirname, '../renderer/dock/index.html'));
     }

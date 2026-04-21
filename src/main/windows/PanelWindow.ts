@@ -27,9 +27,7 @@ export class PanelWindow {
     });
 
     if (process.env.ELECTRON_RENDERER_URL) {
-      void this.window.loadURL(
-        `${process.env.ELECTRON_RENDERER_URL}/src/renderer/panel-chrome/index.html`
-      );
+      void this.window.loadURL(`${process.env.ELECTRON_RENDERER_URL}/panel-chrome/index.html`);
     } else {
       void this.window.loadFile(join(__dirname, '../renderer/panel-chrome/index.html'));
     }
