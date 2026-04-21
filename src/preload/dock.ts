@@ -5,6 +5,8 @@ const dockAPI: DockAPI = {
   readConfig: () => ipcRenderer.invoke(IPC_CHANNELS.configRead),
   updateConfig: (patch) => ipcRenderer.invoke(IPC_CHANNELS.configUpdate, patch),
   listPanels: () => ipcRenderer.invoke(IPC_CHANNELS.panelsList),
+  addPanel: (payload) => ipcRenderer.invoke(IPC_CHANNELS.panelsAdd, payload),
+  reorderPanels: (panelIds) => ipcRenderer.invoke(IPC_CHANNELS.panelsReorder, panelIds),
   hoverPanel: (id) => ipcRenderer.invoke(IPC_CHANNELS.panelsHover, { id }),
   showPanel: (id) => ipcRenderer.invoke(IPC_CHANNELS.panelsShow, { id }),
   hidePanels: () => ipcRenderer.invoke(IPC_CHANNELS.panelsHide),
@@ -22,6 +24,17 @@ const dockAPI: DockAPI = {
 
     return () => {
       ipcRenderer.removeListener(IPC_CHANNELS.panelState, listener);
+    };
+  },
+  onPanelsUpdated: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: Parameters<typeof callback>[0]) => {
+      callback(payload);
+    };
+
+    ipcRenderer.on(IPC_CHANNELS.panelsUpdated, listener);
+
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.panelsUpdated, listener);
     };
   }
 };

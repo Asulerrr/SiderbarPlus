@@ -20,6 +20,7 @@ export default defineConfig({
         input: {
           dock: resolve(__dirname, 'src/preload/dock.ts'),
           panel: resolve(__dirname, 'src/preload/panel.ts'),
+          panelMenu: resolve(__dirname, 'src/preload/panelMenu.ts'),
           panelAnimation: resolve(__dirname, 'src/preload/panelAnimation.ts'),
           webPanel: resolve(__dirname, 'src/preload/webPanel.ts'),
           builtin: resolve(__dirname, 'src/preload/builtin.ts')
@@ -39,6 +40,7 @@ export default defineConfig({
         input: {
           dock: resolve(__dirname, 'src/renderer/dock/index.html'),
           panel: resolve(__dirname, 'src/renderer/panel-chrome/index.html'),
+          panelMenu: resolve(__dirname, 'src/renderer/panel-menu/index.html'),
           panelAnimation: resolve(__dirname, 'src/renderer/panel-animation/index.html')
         }
       }

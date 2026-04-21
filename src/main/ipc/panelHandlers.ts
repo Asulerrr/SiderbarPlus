@@ -1,8 +1,21 @@
-import { BrowserWindow, ipcMain } from 'electron';
+import { BrowserWindow, dialog, ipcMain } from 'electron';
+import { copyFile, mkdir } from 'node:fs/promises';
+import { basename, extname, join } from 'node:path';
+import { nanoid } from 'nanoid';
 import { IPC_CHANNELS } from '../../shared/ipc-contracts';
-import type { IpcResult, PanelDescriptor, PanelState } from '../../shared/types';
+import type {
+  IpcResult,
+  PanelCreatePayload,
+  PanelDescriptor,
+  PanelMenuActionPayload,
+  PanelMenuState,
+  PanelOpenExternalPayload,
+  PanelState
+} from '../../shared/types';
 import type { ConfigStore } from '../store/ConfigStore';
+import { hydratePanelsForRenderer } from '../services/IconAssetService';
 import { logger } from '../utils/logger';
+import { getIconsPath } from '../utils/paths';
 import type { WindowManager } from '../windows/WindowManager';
 
 const emitPanelState = (state: PanelState): void => {
@@ -19,18 +32,124 @@ export const registerPanelHandlers = (
   configStore: ConfigStore,
   windowManager: WindowManager
 ): void => {
+  const emitPanelsUpdated = async (
+    panels: PanelDescriptor[],
+    highlightedPanelId: string | null = null
+  ): Promise<void> => {
+    const sortedPanels = [...panels].sort((left, right) => left.order - right.order);
+    const hydratedPanels = await hydratePanelsForRenderer(sortedPanels);
+
+    windowManager.notifyPanelsUpdated({
+      panels: hydratedPanels,
+      highlightedPanelId
+    });
+  };
+
   ipcMain.handle(IPC_CHANNELS.panelsList, async (): Promise<IpcResult<PanelDescriptor[]>> => {
     try {
       const config = await configStore.read();
       return {
         ok: true,
-        data: [...config.panels].sort((left, right) => left.order - right.order)
+        data: await hydratePanelsForRenderer(
+          [...config.panels].sort((left, right) => left.order - right.order)
+        )
       };
     } catch (error) {
       logger.error('panels:list failed', error);
       return {
         ok: false,
         error: error instanceof Error ? error.message : 'Unknown panel list error'
+      };
+    }
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.panelsAdd,
+    async (_event, payload: PanelCreatePayload): Promise<IpcResult<PanelDescriptor>> => {
+      try {
+        const config = await configStore.read();
+        const panelId = nanoid();
+        let iconSource = payload.iconSource;
+
+        if (iconSource.kind === 'custom' && iconSource.path) {
+          const extension = extname(iconSource.path) || '.png';
+          const targetDir = getIconsPath();
+          const targetPath = join(targetDir, `${panelId}${extension}`);
+          await mkdir(targetDir, { recursive: true });
+          await copyFile(iconSource.path, targetPath);
+          iconSource = {
+            ...iconSource,
+            path: targetPath
+          };
+        }
+
+        const nextPanel: PanelDescriptor = {
+          id: panelId,
+          type: payload.type,
+          title: payload.title.trim(),
+          iconSource,
+          preferredWidth: payload.preferredWidth,
+          web: payload.web,
+          order: config.panels.length
+        };
+
+        const nextConfig = await configStore.update({
+          panels: [...config.panels, nextPanel]
+        });
+
+        await emitPanelsUpdated(nextConfig.panels, nextPanel.id);
+
+        return {
+          ok: true,
+          data: nextPanel
+        };
+      } catch (error) {
+        logger.error('panels:add failed', error);
+        return {
+          ok: false,
+          error: error instanceof Error ? error.message : 'Unknown panel add error'
+        };
+      }
+    }
+  );
+
+  ipcMain.handle(IPC_CHANNELS.panelsReorder, async (_event, panelIds: string[]): Promise<IpcResult<void>> => {
+    try {
+      const config = await configStore.read();
+      const orderMap = new Map(panelIds.map((id, index) => [id, index]));
+      const nextPanels = [...config.panels]
+        .sort((left, right) => {
+          const leftOrder = orderMap.get(left.id);
+          const rightOrder = orderMap.get(right.id);
+
+          if (leftOrder == null && rightOrder == null) {
+            return left.order - right.order;
+          }
+
+          if (leftOrder == null) {
+            return 1;
+          }
+
+          if (rightOrder == null) {
+            return -1;
+          }
+
+          return leftOrder - rightOrder;
+        })
+        .map((panel, index) => ({
+          ...panel,
+          order: index
+        }));
+
+      const nextConfig = await configStore.update({ panels: nextPanels });
+      await emitPanelsUpdated(nextConfig.panels);
+
+      return { ok: true, data: undefined };
+    } catch (error) {
+      logger.error('panels:reorder failed', error);
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : 'Unknown panel reorder error'
       };
     }
   });
@@ -143,6 +262,134 @@ export const registerPanelHandlers = (
     }
   });
 
+  ipcMain.handle(
+    IPC_CHANNELS.panelsMenuOpen,
+    async (_event, payload: import('../../shared/types').PanelMenuAnchor): Promise<IpcResult<void>> => {
+      try {
+        await windowManager.openPanelMenu(payload);
+        return { ok: true, data: undefined };
+      } catch (error) {
+        logger.error('panels:menu-open failed', error);
+        return {
+          ok: false,
+          error: error instanceof Error ? error.message : 'Unknown panel menu open error'
+        };
+      }
+    }
+  );
+
+  ipcMain.handle(IPC_CHANNELS.panelsMenuClose, async (): Promise<IpcResult<void>> => {
+    try {
+      windowManager.closePanelMenu();
+      return { ok: true, data: undefined };
+    } catch (error) {
+      logger.error('panels:menu-close failed', error);
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : 'Unknown panel menu close error'
+      };
+    }
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.panelsMenuState,
+    async (_event, payload: { panelId: string }): Promise<IpcResult<PanelMenuState>> => {
+      try {
+        const state = await windowManager.getPanelMenuState(payload.panelId);
+        if (!state) {
+          return { ok: false, error: 'Panel menu state unavailable' };
+        }
+
+        return { ok: true, data: state };
+      } catch (error) {
+        logger.error('panels:menu-state failed', error);
+        return {
+          ok: false,
+          error: error instanceof Error ? error.message : 'Unknown panel menu state error'
+        };
+      }
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.panelsMenuAction,
+    async (_event, payload: PanelMenuActionPayload): Promise<IpcResult<PanelMenuState>> => {
+      try {
+        const state = await windowManager.runPanelMenuAction(payload.panelId, payload.action);
+        if (!state) {
+          return { ok: false, error: 'Panel menu action unavailable' };
+        }
+
+        return { ok: true, data: state };
+      } catch (error) {
+        logger.error('panels:menu-action failed', error);
+        return {
+          ok: false,
+          error: error instanceof Error ? error.message : 'Unknown panel menu action error'
+        };
+      }
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.panelsOpenExternal,
+    async (_event, payload: PanelOpenExternalPayload): Promise<IpcResult<void>> => {
+      try {
+        await windowManager.openPanelExternal(payload.panelId, payload.url);
+        return { ok: true, data: undefined };
+      } catch (error) {
+        logger.error('panels:open-external failed', error);
+        return {
+          ok: false,
+          error: error instanceof Error ? error.message : 'Unknown panel open external error'
+        };
+      }
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.panelsGoBack,
+    async (_event, payload: import('../../shared/types').PanelActionPayload): Promise<IpcResult<void>> => {
+      try {
+        await windowManager.goBackPanel(payload.panelId);
+        return { ok: true, data: undefined };
+      } catch (error) {
+        logger.error('panels:go-back failed', error);
+        return {
+          ok: false,
+          error: error instanceof Error ? error.message : 'Unknown panel go back error'
+        };
+      }
+    }
+  );
+
+  ipcMain.handle(IPC_CHANNELS.panelsPickIcon, async (): Promise<IpcResult<string | null>> => {
+    try {
+      const dialogResult = await dialog.showOpenDialog({
+        title: '选择自定义图标',
+        properties: ['openFile'],
+        filters: [
+          {
+            name: '图标文件',
+            extensions: ['png', 'jpg', 'jpeg', 'svg', 'ico', 'webp']
+          }
+        ]
+      });
+
+      if (dialogResult.canceled || dialogResult.filePaths.length === 0) {
+        return { ok: true, data: null };
+      }
+
+      return { ok: true, data: dialogResult.filePaths[0] };
+    } catch (error) {
+      logger.error('panels:pick-icon failed', error);
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : 'Unknown panel icon picker error'
+      };
+    }
+  });
+
   ipcMain.handle(IPC_CHANNELS.panelsRemove, async (_event, payload: { id: string }) => {
     try {
       const config = await configStore.read();
@@ -153,11 +400,13 @@ export const registerPanelHandlers = (
           order: index
         }));
 
-      await configStore.update({ panels: nextPanels });
+      const nextConfig = await configStore.update({ panels: nextPanels });
 
       if (windowManager.getActivePanelId() === payload.id) {
         await windowManager.hidePanel(true);
       }
+
+      await emitPanelsUpdated(nextConfig.panels);
 
       return { ok: true, data: undefined };
     } catch (error) {

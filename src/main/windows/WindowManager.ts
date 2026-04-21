@@ -1,14 +1,17 @@
-import type { AppConfig } from '../../shared/types';
+import { IPC_CHANNELS } from '../../shared/ipc-contracts';
+import type { AppConfig, PanelsUpdatedPayload } from '../../shared/types';
 import type { ConfigStore } from '../store/ConfigStore';
 import { PanelManager } from '../panels/PanelManager';
 import { PanelAnimationWindow } from './PanelAnimationWindow';
 import { DockWindow } from './DockWindow';
+import { PanelMenuWindow } from './PanelMenuWindow';
 import { PanelWindow } from './PanelWindow';
 
 export class WindowManager {
   private dockWindow: DockWindow | null = null;
   private panelWindow: PanelWindow | null = null;
   private panelAnimationWindow: PanelAnimationWindow | null = null;
+  private panelMenuWindow: PanelMenuWindow | null = null;
   private panelManager: PanelManager | null = null;
 
   constructor(
@@ -25,14 +28,17 @@ export class WindowManager {
     this.dockWindow = new DockWindow(this.config);
     this.panelWindow = new PanelWindow(this.config);
     this.panelAnimationWindow = new PanelAnimationWindow(this.config);
+    this.panelMenuWindow = new PanelMenuWindow();
 
     this.dockWindow.create();
     this.panelWindow.create();
     this.panelAnimationWindow.create();
+    this.panelMenuWindow.create();
     this.panelManager = new PanelManager(
       this.configStore,
       this.panelWindow,
       this.panelAnimationWindow,
+      this.panelMenuWindow,
       this.emitPanelState
     );
   }
@@ -48,6 +54,7 @@ export class WindowManager {
   hideDockToTray(): void {
     this.dockWindow?.hide();
     this.panelWindow?.hide();
+    this.panelMenuWindow?.hide();
   }
 
   showDockFromTray(): void {
@@ -86,6 +93,37 @@ export class WindowManager {
 
   async hidePanel(destroy = false): Promise<void> {
     await this.panelManager?.hidePanel(destroy);
+  }
+
+  async getPanelMenuState(panelId: string) {
+    return this.panelManager?.getMenuState(panelId) ?? null;
+  }
+
+  notifyPanelsUpdated(payload: PanelsUpdatedPayload): void {
+    this.dockWindow?.getBrowserWindow()?.webContents.send(IPC_CHANNELS.panelsUpdated, payload);
+  }
+
+  async runPanelMenuAction(
+    panelId: string,
+    action: 'reload' | 'copy-link' | 'toggle-mobile-view' | 'toggle-notifications-snooze'
+  ) {
+    return this.panelManager?.runMenuAction(panelId, action) ?? null;
+  }
+
+  async openPanelExternal(panelId: string, url?: string): Promise<void> {
+    await this.panelManager?.openExternal(panelId, url);
+  }
+
+  async goBackPanel(panelId: string): Promise<void> {
+    await this.panelManager?.goBack(panelId);
+  }
+
+  async openPanelMenu(payload: import('../../shared/types').PanelMenuAnchor): Promise<void> {
+    await this.panelManager?.openMenu(payload);
+  }
+
+  closePanelMenu(): void {
+    this.panelManager?.closeMenu();
   }
 
   markPanelSticky(): void {

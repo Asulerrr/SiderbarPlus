@@ -7,6 +7,7 @@ export interface WebPanelConfig {
   openInBrowser: string;
   zoomLevel: number;
   userAgentMode: 'desktop' | 'mobile';
+  notificationsSnoozed?: boolean;
 }
 
 export interface BuiltinPanelConfig {
@@ -16,6 +17,7 @@ export interface BuiltinPanelConfig {
 export interface IconSource {
   kind: 'auto' | 'custom' | 'letter';
   path?: string;
+  dataUrl?: string;
   fallbackLetter?: string;
   fallbackColor?: string;
 }
@@ -93,6 +95,64 @@ export interface PanelAnimationPayload {
 export interface PanelNavigationPayload {
   panelId: string;
   url: string;
+  canGoBack: boolean;
+}
+
+export interface PanelMenuState {
+  panelId: string;
+  currentUrl: string;
+  userAgentMode: 'desktop' | 'mobile';
+  notificationsSnoozed: boolean;
+  canOpenExternal: boolean;
+}
+
+export interface PanelMenuAnchor {
+  panelId: string;
+  x: number;
+  y: number;
+  edge: Edge;
+}
+
+export interface PanelMenuOpenPayload extends PanelMenuAnchor {
+  state: PanelMenuState;
+}
+
+export interface PanelActionPayload {
+  panelId: string;
+}
+
+export interface PanelOpenExternalPayload extends PanelActionPayload {
+  url?: string;
+}
+
+export interface PanelMenuActionPayload extends PanelActionPayload {
+  action: 'reload' | 'copy-link' | 'toggle-mobile-view' | 'toggle-notifications-snooze';
+}
+
+export interface PanelCreatePayload {
+  type: 'web';
+  title: string;
+  iconSource: IconSource;
+  preferredWidth: number;
+  web: WebPanelConfig;
+}
+
+export interface PanelsUpdatedPayload {
+  panels: PanelDescriptor[];
+  highlightedPanelId?: string | null;
+}
+
+export interface FaviconFetchPayload {
+  url: string;
+}
+
+export interface FaviconFetchResult {
+  url: string;
+  iconPath: string;
+  dataUrl: string;
+  source: 'cache' | 'html' | 'favicon' | 'google' | 'letter';
+  fallbackLetter: string;
+  fallbackColor: string;
 }
 
 export interface BrowserInfo {

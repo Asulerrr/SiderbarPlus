@@ -1,9 +1,11 @@
 import { BrowserWindow, screen, WebContentsView } from 'electron';
+import { BUILTIN_ADD_SITE_ID } from '../../shared/constants';
 import { IPC_CHANNELS } from '../../shared/ipc-contracts';
 import type { AppConfig, Edge, PanelDescriptor, PanelState } from '../../shared/types';
 import { logger } from '../utils/logger';
 import type { ConfigStore } from '../store/ConfigStore';
 import type { PanelAnimationWindow } from '../windows/PanelAnimationWindow';
+import type { PanelMenuWindow } from '../windows/PanelMenuWindow';
 import type { PanelWindow } from '../windows/PanelWindow';
 import { getDockBounds } from '../utils/display';
 import { WebPanelHost } from './WebPanelHost';
@@ -29,7 +31,7 @@ const sleep = (ms: number): Promise<void> =>
 type PanelLifecycleState = 'closed' | 'opening' | 'open' | 'closing';
 
 export class PanelManager {
-  private readonly webPanelHost = new WebPanelHost();
+  private readonly webPanelHost: WebPanelHost;
   private readonly panelWindowRef: BrowserWindow;
   private readonly animationWindowRef: BrowserWindow;
   private currentPanelId: string | null = null;
@@ -50,6 +52,7 @@ export class PanelManager {
     private readonly configStore: ConfigStore,
     panelWindow: PanelWindow,
     animationWindow: PanelAnimationWindow,
+    private readonly menuWindow: PanelMenuWindow,
     private readonly emitPanelState: (state: PanelState) => void
   ) {
     const browserWindow = panelWindow.getBrowserWindow();
@@ -65,6 +68,12 @@ export class PanelManager {
     this.animationWindowRef = animationBrowserWindow;
     this.panelWindowRef.setOpacity(0);
     this.panelWindowRef.setIgnoreMouseEvents(true, { forward: true });
+    this.webPanelHost = new WebPanelHost({
+      readConfig: () => this.configStore.read(),
+      updateConfig: (patch) => this.configStore.update(patch),
+      emitNavigation: (payload) =>
+        this.emitNavigation(payload.panelId, payload.url, payload.canGoBack)
+    });
   }
 
   async hoverPanel(panelId: string): Promise<void> {
@@ -74,6 +83,7 @@ export class PanelManager {
 
   async showPanel(panelId: string, sticky = false): Promise<void> {
     const config = await this.configStore.read();
+    await this.webPanelHost.refreshConfig();
     const descriptor = this.getDescriptor(config, panelId);
     if (!descriptor) {
       return;
@@ -133,6 +143,7 @@ export class PanelManager {
   scheduleHide(destroy = false): void {
     this.cancelCloseTimer();
     void this.configStore.read().then((config) => {
+      void this.webPanelHost.refreshConfig();
       this.applyHoverConfig(config);
       if (this.sticky || config.layout.pinned) {
         return;
@@ -152,8 +163,10 @@ export class PanelManager {
     }
 
     const config = await this.configStore.read();
+    await this.webPanelHost.refreshConfig();
     const closingPanelId = this.currentPanelId;
     this.cancelCloseTimer();
+    this.closeMenu();
     this.state = 'closing';
     const token = ++this.lifecycleToken;
     this.pendingDestroyId = destroy ? this.currentPanelId : this.pendingDestroyId;
@@ -189,6 +202,7 @@ export class PanelManager {
     }
 
     this.panelWindowRef.setOpacity(0);
+    this.webPanelHost.applyMuteState(currentView ? snapshotPanelId : null, !config.behavior.keepAudioOnHide);
 
     if (currentView) {
       currentView.setBounds({ x: 0, y: 0, width: 0, height: 0 });
@@ -233,10 +247,63 @@ export class PanelManager {
     return this.currentPanelId;
   }
 
+  async getMenuState(panelId: string): Promise<import('../../shared/types').PanelMenuState | null> {
+    return this.webPanelHost.getMenuState(panelId);
+  }
+
+  async runMenuAction(
+    panelId: string,
+    action: 'reload' | 'copy-link' | 'toggle-mobile-view' | 'toggle-notifications-snooze'
+  ): Promise<import('../../shared/types').PanelMenuState | null> {
+    switch (action) {
+      case 'reload':
+        return this.webPanelHost.reload(panelId);
+      case 'copy-link':
+        return this.webPanelHost.copyLink(panelId);
+      case 'toggle-mobile-view':
+        return this.webPanelHost.toggleMobileView(panelId);
+      case 'toggle-notifications-snooze':
+        return this.webPanelHost.toggleNotificationsSnooze(panelId);
+      default:
+        return null;
+    }
+  }
+
+  async openExternal(panelId: string, url?: string): Promise<void> {
+    await this.webPanelHost.openExternal(panelId, url);
+  }
+
+  async goBack(panelId: string): Promise<void> {
+    await this.webPanelHost.goBack(panelId);
+  }
+
+  async openMenu(anchor: import('../../shared/types').PanelMenuAnchor): Promise<void> {
+    const state = await this.webPanelHost.getMenuState(anchor.panelId);
+    if (!state) {
+      return;
+    }
+
+    const panelBounds = this.panelWindowRef.getContentBounds();
+    this.cancelCloseTimer();
+    this.pointerOutsideSince = null;
+
+    this.menuWindow.open({
+      ...anchor,
+      x: panelBounds.x + anchor.x,
+      y: panelBounds.y + anchor.y,
+      state
+    });
+  }
+
+  closeMenu(): void {
+    this.menuWindow.hide();
+  }
+
   private async switchPanel(descriptor: PanelDescriptor, edge: Edge): Promise<void> {
     const token = ++this.switchToken;
     this.pendingDestroyId = null;
     this.sticky = false;
+    this.closeMenu();
 
     this.panelWindowRef.webContents.send(IPC_CHANNELS.chromeFadeOut);
     await sleep(60);
@@ -250,6 +317,7 @@ export class PanelManager {
     }
 
     this.attachDescriptorView(descriptor, edge);
+    this.webPanelHost.applyMuteState(descriptor.id, false);
 
     this.panelWindowRef.webContents.send(IPC_CHANNELS.chromeFadeIn, {
       descriptor,
@@ -317,8 +385,15 @@ export class PanelManager {
     const cursor = screen.getCursorScreenPoint();
     const panelBounds = this.panelWindowRef.getBounds();
     const dockBounds = getDockBounds(this.edge);
+    const menuBrowserWindow = this.menuWindow.getBrowserWindow();
+    const menuBounds =
+      menuBrowserWindow && menuBrowserWindow.isVisible() ? menuBrowserWindow.getBounds() : null;
 
-    return this.isPointInsideBounds(cursor, panelBounds) || this.isPointInsideBounds(cursor, dockBounds);
+    return (
+      this.isPointInsideBounds(cursor, panelBounds) ||
+      this.isPointInsideBounds(cursor, dockBounds) ||
+      (menuBounds ? this.isPointInsideBounds(cursor, menuBounds) : false)
+    );
   }
 
   private isPointInsideBounds(
@@ -342,6 +417,7 @@ export class PanelManager {
     this.attachView(view);
     this.updateViewBounds(view, edge);
     this.bindViewEvents(descriptor, view);
+    this.webPanelHost.applyMuteState(descriptor.id, false);
   }
 
   private attachView(view: WebContentsView): void {
@@ -375,14 +451,6 @@ export class PanelManager {
     }
 
     (view.webContents as WebContentsWithMeta).__sidebarBound = true;
-
-    view.webContents.on('did-navigate', () => {
-      this.emitNavigation(descriptor.id, this.webPanelHost.getCurrentUrl(descriptor.id, this.getDescriptorUrl(descriptor)));
-    });
-
-    view.webContents.on('did-navigate-in-page', () => {
-      this.emitNavigation(descriptor.id, this.webPanelHost.getCurrentUrl(descriptor.id, this.getDescriptorUrl(descriptor)));
-    });
 
     view.webContents.on('before-input-event', (_event, input) => {
       this.cancelCloseTimer();
@@ -452,19 +520,38 @@ export class PanelManager {
     });
   }
 
-  private emitNavigation(panelId: string, url: string): void {
+  private emitNavigation(panelId: string, url: string, canGoBack?: boolean): void {
     this.panelWindowRef.webContents.send(IPC_CHANNELS.panelNavigationState, {
       panelId,
-      url
+      url,
+      canGoBack: canGoBack ?? this.webPanelHost.getView(panelId)?.webContents.canGoBack() ?? false
     });
   }
 
   private getDescriptor(config: AppConfig, panelId: string): PanelDescriptor | null {
+    if (panelId === BUILTIN_ADD_SITE_ID) {
+      return {
+        id: BUILTIN_ADD_SITE_ID,
+        type: 'builtin',
+        title: '添加网页',
+        iconSource: {
+          kind: 'letter',
+          fallbackLetter: '+',
+          fallbackColor: '#375a7f'
+        },
+        order: -1,
+        preferredWidth: config.layout.panelDefaultWidth,
+        builtin: {
+          widgetId: 'add-site'
+        }
+      };
+    }
+
     return config.panels.find((panel) => panel.id === panelId) ?? null;
   }
 
   private getDescriptorUrl(descriptor: PanelDescriptor): string {
-    return descriptor.web?.url ?? 'about:blank';
+    return descriptor.web?.url ?? '';
   }
 
   private cancelCloseTimer(): void {

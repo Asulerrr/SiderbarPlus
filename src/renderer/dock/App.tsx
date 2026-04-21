@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { APP_NAME, APP_VERSION } from '@shared/constants';
+import { APP_NAME, APP_VERSION, BUILTIN_ADD_SITE_ID } from '@shared/constants';
 import type { AppConfig, PanelDescriptor, PanelState } from '@shared/types';
 import { DockFooter } from './components/DockFooter';
 import { DockIconList } from './components/DockIconList';
@@ -19,6 +19,8 @@ export default function App(): JSX.Element {
     y: number;
     panel: PanelDescriptor;
   } | null>(null);
+  const [highlightedPanelId, setHighlightedPanelId] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
   const hoverTimerRef = useRef<number | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
 
@@ -52,6 +54,23 @@ export default function App(): JSX.Element {
       }
     });
 
+    const disposePanelsUpdated = window.dockAPI.onPanelsUpdated((payload) => {
+      if (!mounted) {
+        return;
+      }
+
+      setPanels(payload.panels);
+      setHighlightedPanelId(payload.highlightedPanelId ?? null);
+
+      if (payload.highlightedPanelId) {
+        window.setTimeout(() => {
+          setHighlightedPanelId((current) =>
+            current === payload.highlightedPanelId ? null : current
+          );
+        }, 650);
+      }
+    });
+
     const handleWindowClick = (event: MouseEvent) => {
       const target = event.target as Node;
       if (rootRef.current && !rootRef.current.contains(target)) {
@@ -67,6 +86,7 @@ export default function App(): JSX.Element {
     return () => {
       mounted = false;
       disposePanelState();
+      disposePanelsUpdated();
       window.removeEventListener('click', handleWindowClick);
       if (hoverTimerRef.current) {
         window.clearTimeout(hoverTimerRef.current);
@@ -82,7 +102,7 @@ export default function App(): JSX.Element {
   };
 
   const handleHoverPanel = (id: string): void => {
-    if (!config) {
+    if (!config || dragging) {
       return;
     }
 
@@ -159,7 +179,25 @@ export default function App(): JSX.Element {
   };
 
   const handleShowBuiltinPlaceholder = (): void => {
-    setPanelState((current) => ({ ...current, activePanelId: null }));
+    if (dragging) {
+      return;
+    }
+
+    void window.dockAPI.cancelHide();
+
+    if (hoverTimerRef.current) {
+      window.clearTimeout(hoverTimerRef.current);
+    }
+
+    if (panelState.activePanelId) {
+      void window.dockAPI.hoverPanel(BUILTIN_ADD_SITE_ID);
+      return;
+    }
+
+    const hoverDelayMs = config?.behavior.hoverOpenDelayMs ?? 200;
+    hoverTimerRef.current = window.setTimeout(() => {
+      void window.dockAPI.hoverPanel(BUILTIN_ADD_SITE_ID);
+    }, hoverDelayMs);
   };
 
   const edge = config?.layout.edge ?? panelState.edge ?? 'right';
@@ -182,7 +220,12 @@ export default function App(): JSX.Element {
         <DockIconList
           panels={panels}
           activePanelId={panelState.activePanelId}
+          highlightedPanelId={highlightedPanelId}
           edge={edge}
+          onDragStateChange={setDragging}
+          onReorder={(panelIds) => {
+            void window.dockAPI.reorderPanels(panelIds);
+          }}
           onHover={handleHoverPanel}
           onActivate={(id) => void handleActivatePanel(id)}
           onContextMenu={handleContextMenu}
