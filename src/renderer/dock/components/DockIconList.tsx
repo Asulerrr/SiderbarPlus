@@ -5,6 +5,7 @@ interface DockIconListProps {
   panels: PanelDescriptor[];
   activePanelId: string | null;
   edge: 'left' | 'right';
+  onHover: (id: string) => void;
   onActivate: (id: string) => void;
   onContextMenu: (event: React.MouseEvent<HTMLButtonElement>, panel: PanelDescriptor) => void;
 }
@@ -13,6 +14,7 @@ export function DockIconList({
   panels,
   activePanelId,
   edge,
+  onHover,
   onActivate,
   onContextMenu
 }: DockIconListProps): JSX.Element {
@@ -25,6 +27,7 @@ export function DockIconList({
             panel={panel}
             active={panel.id === activePanelId}
             edge={edge}
+            onHover={onHover}
             onActivate={onActivate}
             onContextMenu={onContextMenu}
           />

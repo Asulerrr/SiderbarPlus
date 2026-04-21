@@ -1,10 +1,11 @@
 import { BrowserWindow } from 'electron';
 import { join } from 'node:path';
 import { DOCK_WIDTH } from '../../shared/constants';
+import { IPC_CHANNELS } from '../../shared/ipc-contracts';
 import type { AppConfig } from '../../shared/types';
 import { getDockBounds } from '../utils/display';
 
-export class PanelWindow {
+export class PanelAnimationWindow {
   private window: BrowserWindow | null = null;
 
   constructor(private readonly config: AppConfig) {}
@@ -26,6 +27,7 @@ export class PanelWindow {
       frame: false,
       transparent: true,
       show: false,
+      focusable: false,
       hasShadow: false,
       thickFrame: false,
       roundedCorners: false,
@@ -33,23 +35,24 @@ export class PanelWindow {
       backgroundColor: '#00000000',
       autoHideMenuBar: true,
       webPreferences: {
-        preload: join(__dirname, '../preload/panel.js'),
+        preload: join(__dirname, '../preload/panelAnimation.js'),
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: false
       }
     });
 
-    this.window.setOpacity(0);
     this.window.setIgnoreMouseEvents(true, { forward: true });
+    this.window.setAlwaysOnTop(true, 'screen-saver');
+    this.window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     this.window.once('ready-to-show', () => {
       this.window?.showInactive();
     });
 
     if (process.env.ELECTRON_RENDERER_URL) {
-      void this.window.loadURL(`${process.env.ELECTRON_RENDERER_URL}/panel-chrome/index.html`);
+      void this.window.loadURL(`${process.env.ELECTRON_RENDERER_URL}/panel-animation/index.html`);
     } else {
-      void this.window.loadFile(join(__dirname, '../renderer/panel-chrome/index.html'));
+      void this.window.loadFile(join(__dirname, '../renderer/panel-animation/index.html'));
     }
 
     return this.window;
@@ -59,15 +62,11 @@ export class PanelWindow {
     return this.window;
   }
 
-  hide(): void {
-    this.window?.hide();
-  }
-
   show(): void {
     this.window?.showInactive();
   }
 
-  getContentBounds(): Electron.Rectangle | null {
-    return this.window?.getContentBounds() ?? null;
+  hide(): void {
+    this.window?.webContents.send(IPC_CHANNELS.panelAnimationReset);
   }
 }

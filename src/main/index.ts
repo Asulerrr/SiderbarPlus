@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog } from 'electron';
 import { join } from 'node:path';
 import { APP_ID, APP_NAME, APP_VERSION } from '../shared/constants';
+import type { PanelState } from '../shared/types';
 import { registerIpcHandlers } from './ipc';
 import { ConfigStore } from './store/ConfigStore';
 import { TrayManager } from './tray/TrayManager';
@@ -10,6 +11,16 @@ import { WindowManager } from './windows/WindowManager';
 let windowManager: WindowManager | null = null;
 let trayManager: TrayManager | null = null;
 
+const emitPanelState = (state: PanelState): void => {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (window.getTitle() === 'SideBar Plus Panel Animation') {
+      continue;
+    }
+
+    window.webContents.send('panel:state', state);
+  }
+};
+
 const bootstrap = async (): Promise<void> => {
   app.setAppUserModelId(APP_ID);
   app.setName(APP_NAME);
@@ -18,7 +29,7 @@ const bootstrap = async (): Promise<void> => {
   const configStore = new ConfigStore();
   const config = await configStore.initialize();
 
-  windowManager = new WindowManager(config);
+  windowManager = new WindowManager(config, configStore, emitPanelState);
   windowManager.createWindows();
 
   trayManager = new TrayManager({

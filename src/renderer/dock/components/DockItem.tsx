@@ -5,6 +5,7 @@ interface DockItemProps {
   panel: PanelDescriptor;
   active: boolean;
   edge: 'left' | 'right';
+  onHover: (id: string) => void;
   onActivate: (id: string) => void;
   onContextMenu: (event: React.MouseEvent<HTMLButtonElement>, panel: PanelDescriptor) => void;
 }
@@ -44,6 +45,7 @@ export function DockItem({
   panel,
   active,
   edge,
+  onHover,
   onActivate,
   onContextMenu
 }: DockItemProps): JSX.Element {
@@ -60,7 +62,7 @@ export function DockItem({
     <button
       type="button"
       title={panel.title}
-      onMouseEnter={() => onActivate(panel.id)}
+      onMouseEnter={() => onHover(panel.id)}
       onClick={() => onActivate(panel.id)}
       onContextMenu={(event) => onContextMenu(event, panel)}
       className={`group relative flex h-11 w-11 items-center justify-center transition-colors ${

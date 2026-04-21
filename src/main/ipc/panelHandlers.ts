@@ -7,6 +7,10 @@ import type { WindowManager } from '../windows/WindowManager';
 
 const emitPanelState = (state: PanelState): void => {
   for (const window of BrowserWindow.getAllWindows()) {
+    if (window.getTitle() === 'SideBar Plus Panel Animation') {
+      continue;
+    }
+
     window.webContents.send(IPC_CHANNELS.panelState, state);
   }
 };
@@ -31,17 +35,23 @@ export const registerPanelHandlers = (
     }
   });
 
+  ipcMain.handle(IPC_CHANNELS.panelsHover, async (_event, payload: { id: string }) => {
+    try {
+      await windowManager.hoverPanel(payload.id);
+      return { ok: true, data: undefined };
+    } catch (error) {
+      logger.error('panels:hover failed', error);
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : 'Unknown panel hover error'
+      };
+    }
+  });
+
   ipcMain.handle(IPC_CHANNELS.panelsShow, async (_event, payload: { id: string }) => {
     try {
       const config = await configStore.read();
-      const state: PanelState = {
-        activePanelId: payload.id,
-        pinned: config.layout.pinned,
-        edge: config.layout.edge
-      };
-
-      windowManager.setActivePanelId(payload.id);
-      emitPanelState(state);
+      await windowManager.showPanel(payload.id, true);
 
       return { ok: true, data: undefined };
     } catch (error) {
@@ -56,13 +66,7 @@ export const registerPanelHandlers = (
   ipcMain.handle(IPC_CHANNELS.panelsHide, async (): Promise<IpcResult<void>> => {
     try {
       const config = await configStore.read();
-      windowManager.setActivePanelId(null);
-
-      emitPanelState({
-        activePanelId: null,
-        pinned: config.layout.pinned,
-        edge: config.layout.edge
-      });
+      await windowManager.hidePanel(false);
 
       return { ok: true, data: undefined };
     } catch (error) {
@@ -70,6 +74,71 @@ export const registerPanelHandlers = (
       return {
         ok: false,
         error: error instanceof Error ? error.message : 'Unknown panel hide error'
+      };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.panelsScheduleHide, async (): Promise<IpcResult<void>> => {
+    try {
+      windowManager.scheduleHidePanel(false);
+      return { ok: true, data: undefined };
+    } catch (error) {
+      logger.error('panels:schedule-hide failed', error);
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : 'Unknown panel schedule hide error'
+      };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.panelsCancelHide, async (): Promise<IpcResult<void>> => {
+    try {
+      windowManager.cancelScheduledHide();
+      return { ok: true, data: undefined };
+    } catch (error) {
+      logger.error('panels:cancel-hide failed', error);
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : 'Unknown panel cancel hide error'
+      };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.panelsMinimize, async (): Promise<IpcResult<void>> => {
+    try {
+      await windowManager.hidePanel(false);
+      return { ok: true, data: undefined };
+    } catch (error) {
+      logger.error('panels:minimize failed', error);
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : 'Unknown panel minimize error'
+      };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.panelsClose, async (): Promise<IpcResult<void>> => {
+    try {
+      await windowManager.hidePanel(true);
+      return { ok: true, data: undefined };
+    } catch (error) {
+      logger.error('panels:close failed', error);
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : 'Unknown panel close error'
+      };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.panelsMarkSticky, async (): Promise<IpcResult<void>> => {
+    try {
+      windowManager.markPanelSticky();
+      return { ok: true, data: undefined };
+    } catch (error) {
+      logger.error('panels:mark-sticky failed', error);
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : 'Unknown panel sticky error'
       };
     }
   });
@@ -87,12 +156,7 @@ export const registerPanelHandlers = (
       await configStore.update({ panels: nextPanels });
 
       if (windowManager.getActivePanelId() === payload.id) {
-        windowManager.setActivePanelId(null);
-        emitPanelState({
-          activePanelId: null,
-          pinned: config.layout.pinned,
-          edge: config.layout.edge
-        });
+        await windowManager.hidePanel(true);
       }
 
       return { ok: true, data: undefined };

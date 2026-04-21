@@ -19,6 +19,7 @@ export default function App(): JSX.Element {
     y: number;
     panel: PanelDescriptor;
   } | null>(null);
+  const hoverTimerRef = useRef<number | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -67,6 +68,9 @@ export default function App(): JSX.Element {
       mounted = false;
       disposePanelState();
       window.removeEventListener('click', handleWindowClick);
+      if (hoverTimerRef.current) {
+        window.clearTimeout(hoverTimerRef.current);
+      }
     };
   }, []);
 
@@ -77,9 +81,33 @@ export default function App(): JSX.Element {
     }
   };
 
+  const handleHoverPanel = (id: string): void => {
+    if (!config) {
+      return;
+    }
+
+    void window.dockAPI.cancelHide();
+
+    if (hoverTimerRef.current) {
+      window.clearTimeout(hoverTimerRef.current);
+    }
+
+    if (panelState.activePanelId) {
+      void window.dockAPI.hoverPanel(id);
+      return;
+    }
+
+    hoverTimerRef.current = window.setTimeout(() => {
+      void window.dockAPI.hoverPanel(id);
+    }, config.behavior.hoverOpenDelayMs);
+  };
+
   const handleActivatePanel = async (id: string): Promise<void> => {
     setMenuOpen(false);
     setContextMenu(null);
+    if (hoverTimerRef.current) {
+      window.clearTimeout(hoverTimerRef.current);
+    }
     const result = await window.dockAPI.showPanel(id);
     if (result.ok) {
       setPanelState((current) => ({ ...current, activePanelId: id }));
@@ -137,12 +165,25 @@ export default function App(): JSX.Element {
   const edge = config?.layout.edge ?? panelState.edge ?? 'right';
 
   return (
-    <main ref={rootRef} className="relative h-screen w-[44px] bg-dock text-white">
+    <main
+      ref={rootRef}
+      className="relative h-screen w-[44px] bg-dock text-white"
+      onMouseEnter={() => {
+        void window.dockAPI.cancelHide();
+      }}
+      onMouseLeave={() => {
+        if (hoverTimerRef.current) {
+          window.clearTimeout(hoverTimerRef.current);
+        }
+        void window.dockAPI.scheduleHide();
+      }}
+    >
       <div className="absolute inset-x-0 top-0 bottom-[126px]">
         <DockIconList
           panels={panels}
           activePanelId={panelState.activePanelId}
           edge={edge}
+          onHover={handleHoverPanel}
           onActivate={(id) => void handleActivatePanel(id)}
           onContextMenu={handleContextMenu}
         />

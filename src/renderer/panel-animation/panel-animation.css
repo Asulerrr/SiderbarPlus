@@ -1,0 +1,21 @@
+:root {
+  background: transparent;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: transparent;
+}
+
+body {
+  user-select: none;
+}
+
+.panel-animation-shell {
+  will-change: transform;
+  backface-visibility: hidden;
+}

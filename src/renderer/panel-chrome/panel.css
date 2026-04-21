@@ -1,0 +1,17 @@
+html,
+body,
+#root {
+  background: transparent;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  margin: 0;
+  user-select: none;
+}
+
+.panel-shell {
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+}

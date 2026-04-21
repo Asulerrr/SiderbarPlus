@@ -61,6 +61,40 @@ export interface PanelState {
   edge: Edge;
 }
 
+export interface PanelAnimatePayload {
+  panelId: string;
+  descriptor: PanelDescriptor;
+  edge: Edge;
+  url: string;
+  snapshotDataUrl?: string | null;
+  animationDelayMs?: number;
+}
+
+export interface PanelChromePayload {
+  descriptor: PanelDescriptor;
+  edge: Edge;
+  url: string;
+}
+
+export interface PanelSnapshotPayload {
+  panelId: string;
+  snapshotDataUrl: string | null;
+}
+
+export interface PanelAnimationPayload {
+  panelId: string;
+  descriptor: PanelDescriptor;
+  edge: Edge;
+  url: string;
+  snapshotDataUrl: string | null;
+  animationDelayMs?: number;
+}
+
+export interface PanelNavigationPayload {
+  panelId: string;
+  url: string;
+}
+
 export interface BrowserInfo {
   id: string;
   name: string;

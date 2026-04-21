@@ -20,6 +20,8 @@ export default defineConfig({
         input: {
           dock: resolve(__dirname, 'src/preload/dock.ts'),
           panel: resolve(__dirname, 'src/preload/panel.ts'),
+          panelAnimation: resolve(__dirname, 'src/preload/panelAnimation.ts'),
+          webPanel: resolve(__dirname, 'src/preload/webPanel.ts'),
           builtin: resolve(__dirname, 'src/preload/builtin.ts')
         }
       }
@@ -36,7 +38,8 @@ export default defineConfig({
       rollupOptions: {
         input: {
           dock: resolve(__dirname, 'src/renderer/dock/index.html'),
-          panel: resolve(__dirname, 'src/renderer/panel-chrome/index.html')
+          panel: resolve(__dirname, 'src/renderer/panel-chrome/index.html'),
+          panelAnimation: resolve(__dirname, 'src/renderer/panel-animation/index.html')
         }
       }
     },
