@@ -52,4 +52,16 @@ export class DockWindow {
   getBrowserWindow(): BrowserWindow | null {
     return this.window;
   }
+
+  show(): void {
+    this.window?.showInactive();
+  }
+
+  hide(): void {
+    this.window?.hide();
+  }
+
+  isVisible(): boolean {
+    return this.window?.isVisible() ?? false;
+  }
 }

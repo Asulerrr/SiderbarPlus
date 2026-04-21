@@ -55,6 +55,19 @@ export interface AppConfig {
   };
 }
 
+export interface PanelState {
+  activePanelId: string | null;
+  pinned: boolean;
+  edge: Edge;
+}
+
+export interface BrowserInfo {
+  id: string;
+  name: string;
+  path?: string;
+  isDefault?: boolean;
+}
+
 export interface IpcSuccess<T> {
   ok: true;
   data: T;

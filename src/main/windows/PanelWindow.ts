@@ -40,4 +40,8 @@ export class PanelWindow {
   getBrowserWindow(): BrowserWindow | null {
     return this.window;
   }
+
+  hide(): void {
+    this.window?.hide();
+  }
 }

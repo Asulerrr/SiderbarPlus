@@ -5,6 +5,7 @@ import { PanelWindow } from './PanelWindow';
 export class WindowManager {
   private dockWindow: DockWindow | null = null;
   private panelWindow: PanelWindow | null = null;
+  private activePanelId: string | null = null;
 
   constructor(private readonly config: AppConfig) {}
 
@@ -22,5 +23,36 @@ export class WindowManager {
 
   getPanelWindow(): PanelWindow | null {
     return this.panelWindow;
+  }
+
+  hideDockToTray(): void {
+    this.dockWindow?.hide();
+    this.panelWindow?.hide();
+  }
+
+  showDockFromTray(): void {
+    this.dockWindow?.show();
+  }
+
+  toggleDockVisibility(): boolean {
+    if (this.dockWindow?.isVisible()) {
+      this.hideDockToTray();
+      return false;
+    }
+
+    this.showDockFromTray();
+    return true;
+  }
+
+  isDockVisible(): boolean {
+    return this.dockWindow?.isVisible() ?? false;
+  }
+
+  setActivePanelId(panelId: string | null): void {
+    this.activePanelId = panelId;
+  }
+
+  getActivePanelId(): string | null {
+    return this.activePanelId;
   }
 }
