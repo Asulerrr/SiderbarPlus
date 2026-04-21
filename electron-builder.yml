@@ -1,0 +1,30 @@
+appId: com.sidebarplus.app
+productName: SideBar Plus
+copyright: Copyright © 2026
+directories:
+  buildResources: resources
+  output: dist
+files:
+  - out/**/*
+  - '!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}'
+  - '!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}'
+asarUnpack:
+  - '**/node_modules/sharp/**'
+  - '**/node_modules/@img/**'
+  - '**/node_modules/koffi/**'
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: resources/icon.ico
+  requestedExecutionLevel: asInvoker
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  installerIcon: resources/icon.ico
+  uninstallerIcon: resources/icon.ico
+  shortcutName: SideBar Plus
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  license: resources/installer/license.txt

@@ -1,0 +1,61 @@
+<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1E3A5F"/>
+      <stop offset="100%" stop-color="#0A1628"/>
+    </linearGradient>
+    <linearGradient id="panelGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="rgba(255,255,255,0.18)"/>
+      <stop offset="100%" stop-color="rgba(255,255,255,0.08)"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="6"/>
+    </filter>
+  </defs>
+
+  <!-- 背景圆角矩形 -->
+  <rect width="512" height="512" rx="96" fill="url(#bgGrad)"/>
+
+  <!-- 左侧展开的面板 -->
+  <rect x="96" y="128" width="232" height="256" rx="20"
+        fill="url(#panelGrad)"
+        stroke="rgba(255,255,255,0.12)"
+        stroke-width="2"/>
+
+  <!-- 面板顶部标题线（高亮） -->
+  <rect x="124" y="172" width="120" height="10" rx="5" fill="rgba(255,255,255,0.75)"/>
+
+  <!-- 面板内容线 -->
+  <rect x="124" y="216" width="176" height="8" rx="4" fill="rgba(255,255,255,0.35)"/>
+  <rect x="124" y="244" width="140" height="8" rx="4" fill="rgba(255,255,255,0.28)"/>
+  <rect x="124" y="272" width="164" height="8" rx="4" fill="rgba(255,255,255,0.28)"/>
+  <rect x="124" y="300" width="108" height="8" rx="4" fill="rgba(255,255,255,0.28)"/>
+  <rect x="124" y="328" width="144" height="8" rx="4" fill="rgba(255,255,255,0.28)"/>
+
+  <!-- 右侧 Dock 容器 -->
+  <rect x="352" y="96" width="64" height="320" rx="20"
+        fill="#0B1726"
+        stroke="rgba(255,255,255,0.08)"
+        stroke-width="2"/>
+
+  <!-- 激活图标的光晕 -->
+  <circle cx="384" cy="144" r="20" fill="#4CC2FF" opacity="0.35" filter="url(#glow)"/>
+
+  <!-- Dock 激活图标（对应左侧展开的面板） -->
+  <circle cx="384" cy="144" r="14" fill="#4CC2FF"/>
+
+  <!-- Dock 普通图标 -->
+  <circle cx="384" cy="196" r="12" fill="rgba(255,255,255,0.55)"/>
+  <circle cx="384" cy="244" r="12" fill="rgba(255,255,255,0.4)"/>
+  <circle cx="384" cy="292" r="12" fill="rgba(255,255,255,0.3)"/>
+
+  <!-- Dock 底部分隔线 -->
+  <line x1="372" y1="340" x2="396" y2="340"
+        stroke="rgba(255,255,255,0.18)" stroke-width="2" stroke-linecap="round"/>
+
+  <!-- + 按钮（象征扩展性） -->
+  <line x1="378" y1="376" x2="390" y2="376"
+        stroke="rgba(255,255,255,0.55)" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="384" y1="370" x2="384" y2="382"
+        stroke="rgba(255,255,255,0.55)" stroke-width="2.5" stroke-linecap="round"/>
+</svg>
