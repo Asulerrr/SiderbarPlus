@@ -4,6 +4,7 @@ import { APP_ID, APP_NAME, APP_VERSION } from '../shared/constants';
 import type { PanelState } from '../shared/types';
 import { registerIpcHandlers } from './ipc';
 import { ConfigStore } from './store/ConfigStore';
+import { resetDevelopmentData } from './utils/devReset';
 import { TrayManager } from './tray/TrayManager';
 import { logger } from './utils/logger';
 import { WindowManager } from './windows/WindowManager';
@@ -25,6 +26,7 @@ const bootstrap = async (): Promise<void> => {
   app.setAppUserModelId(APP_ID);
   app.setName(APP_NAME);
   app.setPath('userData', join(app.getPath('appData'), APP_NAME));
+  await resetDevelopmentData();
 
   const configStore = new ConfigStore();
   const config = await configStore.initialize();

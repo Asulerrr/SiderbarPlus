@@ -15,6 +15,8 @@ const MENU_SIZE = getPanelMenuWindowSize({
 
 export class PanelMenuWindow {
   private window: BrowserWindow | null = null;
+  private pendingPayload: PanelMenuOpenPayload | null = null;
+  private ready = false;
 
   create(): BrowserWindow {
     this.window = new BrowserWindow({
@@ -44,6 +46,13 @@ export class PanelMenuWindow {
 
     this.window.setAlwaysOnTop(true, 'screen-saver');
     this.window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    this.window.webContents.once('did-finish-load', () => {
+      this.ready = true;
+      if (this.pendingPayload) {
+        this.showWithPayload(this.pendingPayload);
+        this.pendingPayload = null;
+      }
+    });
 
     if (process.env.ELECTRON_RENDERER_URL) {
       void this.window.loadURL(`${process.env.ELECTRON_RENDERER_URL}/panel-menu/index.html`);
@@ -59,6 +68,19 @@ export class PanelMenuWindow {
   }
 
   open(payload: PanelMenuOpenPayload): void {
+    if (!this.window) {
+      return;
+    }
+
+    if (!this.ready) {
+      this.pendingPayload = payload;
+      return;
+    }
+
+    this.showWithPayload(payload);
+  }
+
+  private showWithPayload(payload: PanelMenuOpenPayload): void {
     if (!this.window) {
       return;
     }
@@ -85,6 +107,8 @@ export class PanelMenuWindow {
       width: MENU_SIZE.width,
       height: MENU_SIZE.height
     });
+    this.window.setAlwaysOnTop(true, 'screen-saver');
+    this.window.moveTop();
     this.window.showInactive();
     this.window.webContents.send(IPC_CHANNELS.panelMenuHydrate, payload);
   }
