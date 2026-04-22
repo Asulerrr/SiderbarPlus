@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { getDockActiveIndicatorSide } from '@shared/dockLayout';
 import { toRenderableIconUrl } from '@shared/iconUrl';
 import type { PanelDescriptor } from '@shared/types';
 
@@ -55,6 +56,7 @@ export function DockItem({
   const [iconFailed, setIconFailed] = useState(false);
   const [iconLoaded, setIconLoaded] = useState(false);
   const iconSrc = buildIconSrc(panel);
+  const activeIndicatorSide = getDockActiveIndicatorSide(edge);
 
   useEffect(() => {
     setIconFailed(false);
@@ -69,7 +71,7 @@ export function DockItem({
       onMouseEnter={() => onHover(panel.id)}
       onClick={() => onActivate(panel.id)}
       onContextMenu={(event) => onContextMenu(event, panel)}
-      className={`group relative flex h-11 w-11 items-center justify-center transition-colors ${
+      className={`group relative flex h-11 w-11 shrink-0 items-center justify-center transition-colors ${
         active
           ? 'bg-white/12'
           : highlighted
@@ -79,7 +81,7 @@ export function DockItem({
     >
       {active ? (
         <span
-          className={`absolute ${edge === 'right' ? 'left-0' : 'right-0'} h-5 w-0.5 rounded-full bg-accent`}
+          className={`absolute ${activeIndicatorSide === 'right' ? 'right-0' : 'left-0'} h-5 w-0.5 rounded-full bg-accent`}
         />
       ) : null}
 

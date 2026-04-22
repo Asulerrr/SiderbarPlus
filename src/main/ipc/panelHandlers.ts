@@ -1,6 +1,6 @@
-import { BrowserWindow, dialog, ipcMain } from 'electron';
+import { BrowserWindow, Menu, dialog, ipcMain } from 'electron';
 import { copyFile, mkdir } from 'node:fs/promises';
-import { basename, extname, join } from 'node:path';
+import { extname, join, resolve } from 'node:path';
 import { nanoid } from 'nanoid';
 import { IPC_CHANNELS } from '../../shared/ipc-contracts';
 import type {
@@ -10,7 +10,9 @@ import type {
   PanelMenuActionPayload,
   PanelMenuState,
   PanelOpenExternalPayload,
-  PanelState
+  PanelState,
+  PanelUpdatePayload,
+  SiteInfo
 } from '../../shared/types';
 import type { ConfigStore } from '../store/ConfigStore';
 import { hydratePanelsForRenderer } from '../services/IconAssetService';
@@ -32,6 +34,33 @@ export const registerPanelHandlers = (
   configStore: ConfigStore,
   windowManager: WindowManager
 ): void => {
+  const persistCustomIconPath = async (panelId: string, iconPath: string): Promise<string> => {
+    const extension = extname(iconPath) || '.png';
+    const targetDir = getIconsPath();
+    const targetPath = join(targetDir, `${panelId}${extension}`);
+    await mkdir(targetDir, { recursive: true });
+
+    if (resolve(iconPath) !== resolve(targetPath)) {
+      await copyFile(iconPath, targetPath);
+    }
+
+    return targetPath;
+  };
+
+  const persistIconSource = async (
+    panelId: string,
+    iconSource: PanelDescriptor['iconSource']
+  ): Promise<PanelDescriptor['iconSource']> => {
+    if (iconSource.kind !== 'custom' || !iconSource.path) {
+      return iconSource;
+    }
+
+    return {
+      ...iconSource,
+      path: await persistCustomIconPath(panelId, iconSource.path)
+    };
+  };
+
   const emitPanelsUpdated = async (
     panels: PanelDescriptor[],
     highlightedPanelId: string | null = null
@@ -69,19 +98,7 @@ export const registerPanelHandlers = (
       try {
         const config = await configStore.read();
         const panelId = nanoid();
-        let iconSource = payload.iconSource;
-
-        if (iconSource.kind === 'custom' && iconSource.path) {
-          const extension = extname(iconSource.path) || '.png';
-          const targetDir = getIconsPath();
-          const targetPath = join(targetDir, `${panelId}${extension}`);
-          await mkdir(targetDir, { recursive: true });
-          await copyFile(iconSource.path, targetPath);
-          iconSource = {
-            ...iconSource,
-            path: targetPath
-          };
-        }
+        const iconSource = await persistIconSource(panelId, payload.iconSource);
 
         const nextPanel: PanelDescriptor = {
           id: panelId,
@@ -108,6 +125,56 @@ export const registerPanelHandlers = (
         return {
           ok: false,
           error: error instanceof Error ? error.message : 'Unknown panel add error'
+        };
+      }
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.panelsUpdate,
+    async (_event, payload: PanelUpdatePayload): Promise<IpcResult<PanelDescriptor>> => {
+      try {
+        const config = await configStore.read();
+        const currentPanel = config.panels.find((panel) => panel.id === payload.id);
+        if (!currentPanel) {
+          return { ok: false, error: 'Panel not found' };
+        }
+
+        const nextIconSource = payload.patch.iconSource
+          ? await persistIconSource(payload.id, payload.patch.iconSource)
+          : currentPanel.iconSource;
+
+        const nextPanel: PanelDescriptor = {
+          ...currentPanel,
+          title: payload.patch.title?.trim() || currentPanel.title,
+          iconSource: nextIconSource,
+          preferredWidth: payload.patch.preferredWidth ?? currentPanel.preferredWidth,
+          web: currentPanel.web
+            ? {
+                ...currentPanel.web,
+                ...payload.patch.web
+              }
+            : currentPanel.web
+        };
+
+        const nextPanels = config.panels.map((panel) => (panel.id === payload.id ? nextPanel : panel));
+        const nextConfig = await configStore.update({ panels: nextPanels });
+        if (windowManager.getActivePanelId() === payload.id) {
+          await windowManager.hidePanel(true);
+        } else {
+          windowManager.destroyPanelView(payload.id);
+        }
+        await emitPanelsUpdated(nextConfig.panels, payload.id);
+
+        return {
+          ok: true,
+          data: nextPanel
+        };
+      } catch (error) {
+        logger.error('panels:update failed', error);
+        return {
+          ok: false,
+          error: error instanceof Error ? error.message : 'Unknown panel update error'
         };
       }
     }
@@ -292,6 +359,25 @@ export const registerPanelHandlers = (
   });
 
   ipcMain.handle(
+    IPC_CHANNELS.panelsMenuCloseAndResumeHover,
+    async (): Promise<IpcResult<void>> => {
+      try {
+        windowManager.closePanelMenuAndResumeHover();
+        return { ok: true, data: undefined };
+      } catch (error) {
+        logger.error('panels:menu-close-and-resume-hover failed', error);
+        return {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : 'Unknown panel menu close and resume hover error'
+        };
+      }
+    }
+  );
+
+  ipcMain.handle(
     IPC_CHANNELS.panelsMenuState,
     async (_event, payload: { panelId: string }): Promise<IpcResult<PanelMenuState>> => {
       try {
@@ -390,6 +476,26 @@ export const registerPanelHandlers = (
     }
   });
 
+  ipcMain.handle(
+    IPC_CHANNELS.panelsGetSiteInfo,
+    async (_event, payload: { panelId: string }): Promise<IpcResult<SiteInfo>> => {
+      try {
+        const info = await windowManager.getSiteInfo(payload.panelId);
+        if (!info) {
+          return { ok: false, error: 'Panel site info unavailable' };
+        }
+
+        return { ok: true, data: info };
+      } catch (error) {
+        logger.error('panels:get-site-info failed', error);
+        return {
+          ok: false,
+          error: error instanceof Error ? error.message : 'Unknown panel site info error'
+        };
+      }
+    }
+  );
+
   ipcMain.handle(IPC_CHANNELS.panelsRemove, async (_event, payload: { id: string }) => {
     try {
       const config = await configStore.read();
@@ -417,4 +523,55 @@ export const registerPanelHandlers = (
       };
     }
   });
+
+  ipcMain.handle(
+    IPC_CHANNELS.panelsContextMenu,
+    async (_event, payload: { id: string }): Promise<IpcResult<void>> => {
+      try {
+        const config = await configStore.read();
+        const panel = config.panels.find((item) => item.id === payload.id);
+        if (!panel) {
+          return { ok: false, error: 'Panel not found' };
+        }
+
+        const menu = Menu.buildFromTemplate([
+          {
+            label: '从边栏取消固定',
+            click: async () => {
+              try {
+                const latestConfig = await configStore.read();
+                const nextPanels = latestConfig.panels
+                  .filter((item) => item.id !== payload.id)
+                  .map((item, index) => ({
+                    ...item,
+                    order: index
+                  }));
+                const nextConfig = await configStore.update({ panels: nextPanels });
+
+                if (windowManager.getActivePanelId() === payload.id) {
+                  await windowManager.hidePanel(true);
+                }
+
+                await emitPanelsUpdated(nextConfig.panels);
+              } catch (error) {
+                logger.error('panels:context-menu remove failed', error);
+              }
+            }
+          }
+        ]);
+
+        menu.popup({
+          window: windowManager.getDockWindow()?.getBrowserWindow() ?? undefined
+        });
+
+        return { ok: true, data: undefined };
+      } catch (error) {
+        logger.error('panels:context-menu failed', error);
+        return {
+          ok: false,
+          error: error instanceof Error ? error.message : 'Unknown panel context menu error'
+        };
+      }
+    }
+  );
 };

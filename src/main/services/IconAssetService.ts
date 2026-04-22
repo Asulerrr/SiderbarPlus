@@ -34,7 +34,7 @@ export const readIconPathAsDataUrl = async (iconPath: string): Promise<string> =
   return `data:${buildIconMimeType(iconPath)};base64,${buffer.toString('base64')}`;
 };
 
-const hydrateIconSourceForRenderer = async (iconSource: IconSource): Promise<IconSource> => {
+export const hydrateIconSourceForRenderer = async (iconSource: IconSource): Promise<IconSource> => {
   if (!isLocalIconPath(iconSource.path)) {
     return iconSource;
   }

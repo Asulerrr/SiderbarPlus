@@ -1,7 +1,8 @@
 import { BrowserWindow, screen, WebContentsView } from 'electron';
 import { BUILTIN_ADD_SITE_ID } from '../../shared/constants';
 import { IPC_CHANNELS } from '../../shared/ipc-contracts';
-import type { AppConfig, Edge, PanelDescriptor, PanelState } from '../../shared/types';
+import { buildBuiltinPanelId, parseBuiltinPanelId } from '../../shared/builtinPanels';
+import type { AppConfig, Edge, PanelDescriptor, PanelState, SiteInfo } from '../../shared/types';
 import { logger } from '../utils/logger';
 import type { ConfigStore } from '../store/ConfigStore';
 import type { PanelAnimationWindow } from '../windows/PanelAnimationWindow';
@@ -97,6 +98,7 @@ export class PanelManager {
     if (this.currentPanelId && this.currentPanelId !== panelId && this.state !== 'closed') {
       if (this.state === 'closing') {
         this.state = 'open';
+        this.raisePanelWindows();
         this.panelWindowRef.setOpacity(1);
         this.panelWindowRef.setIgnoreMouseEvents(false);
         this.resetAnimationWindow();
@@ -116,6 +118,7 @@ export class PanelManager {
     const token = ++this.lifecycleToken;
     this.currentPanelId = panelId;
     this.pendingDestroyId = null;
+    this.raisePanelWindows();
     this.panelWindowRef.setIgnoreMouseEvents(false);
 
     this.sendAnimationOpen(descriptor, config.layout.edge, this.snapshots.get(panelId) ?? null);
@@ -134,6 +137,7 @@ export class PanelManager {
     }
 
     this.panelWindowRef.setOpacity(1);
+    this.raisePanelWindows();
     this.resetAnimationWindow();
     this.cancelCloseTimer();
     this.state = 'open';
@@ -170,6 +174,7 @@ export class PanelManager {
     this.state = 'closing';
     const token = ++this.lifecycleToken;
     this.pendingDestroyId = destroy ? this.currentPanelId : this.pendingDestroyId;
+    this.emitState(config.layout.edge, config.layout.pinned, false);
 
     const snapshotPanelId = this.currentPanelId;
     const currentView = this.webPanelHost.getView(this.currentPanelId);
@@ -253,7 +258,14 @@ export class PanelManager {
 
   async runMenuAction(
     panelId: string,
-    action: 'reload' | 'copy-link' | 'toggle-mobile-view' | 'toggle-notifications-snooze'
+    action:
+      | 'reload'
+      | 'copy-link'
+      | 'toggle-mobile-view'
+      | 'toggle-notifications-snooze'
+      | 'open-edit-site'
+      | 'clear-site-data'
+      | 'open-site-info'
   ): Promise<import('../../shared/types').PanelMenuState | null> {
     switch (action) {
       case 'reload':
@@ -264,9 +276,21 @@ export class PanelManager {
         return this.webPanelHost.toggleMobileView(panelId);
       case 'toggle-notifications-snooze':
         return this.webPanelHost.toggleNotificationsSnooze(panelId);
+      case 'open-edit-site':
+        await this.showPanel(buildBuiltinPanelId('edit-site', panelId), true);
+        return this.webPanelHost.getMenuState(panelId);
+      case 'clear-site-data':
+        return this.webPanelHost.clearSiteData(panelId);
+      case 'open-site-info':
+        await this.showPanel(buildBuiltinPanelId('site-info', panelId), true);
+        return this.webPanelHost.getMenuState(panelId);
       default:
         return null;
     }
+  }
+
+  async getSiteInfo(panelId: string): Promise<SiteInfo | null> {
+    return this.webPanelHost.getSiteInfo(panelId);
   }
 
   async openExternal(panelId: string, url?: string): Promise<void> {
@@ -297,6 +321,17 @@ export class PanelManager {
 
   closeMenu(): void {
     this.menuWindow.hide();
+  }
+
+  closeMenuAndResumeHover(): void {
+    this.closeMenu();
+    this.sticky = false;
+    this.pointerOutsideSince = null;
+  }
+
+  destroyPanelView(panelId: string): void {
+    this.webPanelHost.destroyView(panelId);
+    this.snapshots.delete(panelId);
   }
 
   private async switchPanel(descriptor: PanelDescriptor, edge: Edge): Promise<void> {
@@ -469,6 +504,8 @@ export class PanelManager {
   }
 
   private sendAnimationOpen(descriptor: PanelDescriptor, edge: Edge, snapshotDataUrl: string | null): void {
+    this.animationWindowRef.setAlwaysOnTop(true, 'screen-saver');
+    this.animationWindowRef.moveTop();
     this.animationWindowRef.webContents.send(IPC_CHANNELS.panelAnimationOpen, {
       panelId: descriptor.id,
       descriptor,
@@ -498,6 +535,13 @@ export class PanelManager {
     this.animationWindowRef.webContents.send(IPC_CHANNELS.panelAnimationReset);
   }
 
+  private raisePanelWindows(): void {
+    this.animationWindowRef.setAlwaysOnTop(true, 'screen-saver');
+    this.panelWindowRef.setAlwaysOnTop(true, 'screen-saver');
+    this.animationWindowRef.moveTop();
+    this.panelWindowRef.moveTop();
+  }
+
   private async captureViewSnapshot(view: WebContentsView | null): Promise<string | null> {
     if (!view || view.webContents.isDestroyed()) {
       return null;
@@ -512,9 +556,10 @@ export class PanelManager {
     }
   }
 
-  private emitState(edge: Edge, pinned: boolean): void {
+  private emitState(edge: Edge, pinned: boolean, panelVisible = this.state === 'open'): void {
     this.emitPanelState({
       activePanelId: this.currentPanelId,
+      panelVisible,
       pinned,
       edge
     });
@@ -529,7 +574,8 @@ export class PanelManager {
   }
 
   private getDescriptor(config: AppConfig, panelId: string): PanelDescriptor | null {
-    if (panelId === BUILTIN_ADD_SITE_ID) {
+    const builtinRoute = parseBuiltinPanelId(panelId);
+    if (builtinRoute?.widgetId === 'add-site') {
       return {
         id: BUILTIN_ADD_SITE_ID,
         type: 'builtin',
@@ -543,6 +589,44 @@ export class PanelManager {
         preferredWidth: config.layout.panelDefaultWidth,
         builtin: {
           widgetId: 'add-site'
+        }
+      };
+    }
+
+    if (builtinRoute?.widgetId === 'edit-site') {
+      return {
+        id: panelId,
+        type: 'builtin',
+        title: '编辑此站点',
+        iconSource: {
+          kind: 'letter',
+          fallbackLetter: 'E',
+          fallbackColor: '#5f4b8b'
+        },
+        order: -1,
+        preferredWidth: config.layout.panelDefaultWidth,
+        builtin: {
+          widgetId: 'edit-site',
+          targetPanelId: builtinRoute.targetPanelId
+        }
+      };
+    }
+
+    if (builtinRoute?.widgetId === 'site-info') {
+      return {
+        id: panelId,
+        type: 'builtin',
+        title: '站点信息',
+        iconSource: {
+          kind: 'letter',
+          fallbackLetter: 'I',
+          fallbackColor: '#3f6f62'
+        },
+        order: -1,
+        preferredWidth: config.layout.panelDefaultWidth,
+        builtin: {
+          widgetId: 'site-info',
+          targetPanelId: builtinRoute.targetPanelId
         }
       };
     }

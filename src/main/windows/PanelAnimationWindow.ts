@@ -63,6 +63,8 @@ export class PanelAnimationWindow {
   }
 
   show(): void {
+    this.window?.setAlwaysOnTop(true, 'screen-saver');
+    this.window?.moveTop();
     this.window?.showInactive();
   }
 

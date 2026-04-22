@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { APP_NAME, APP_VERSION, BUILTIN_ADD_SITE_ID } from '@shared/constants';
+import { shouldShowDockActiveIndicator } from '@shared/dockLayout';
 import type { AppConfig, PanelDescriptor, PanelState } from '@shared/types';
 import { DockFooter } from './components/DockFooter';
 import { DockIconList } from './components/DockIconList';
@@ -10,15 +11,11 @@ export default function App(): JSX.Element {
   const [panels, setPanels] = useState<PanelDescriptor[]>([]);
   const [panelState, setPanelState] = useState<PanelState>({
     activePanelId: null,
+    panelVisible: false,
     pinned: false,
     edge: 'right'
   });
   const [menuOpen, setMenuOpen] = useState(false);
-  const [contextMenu, setContextMenu] = useState<{
-    x: number;
-    y: number;
-    panel: PanelDescriptor;
-  } | null>(null);
   const [highlightedPanelId, setHighlightedPanelId] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const hoverTimerRef = useRef<number | null>(null);
@@ -75,9 +72,6 @@ export default function App(): JSX.Element {
       const target = event.target as Node;
       if (rootRef.current && !rootRef.current.contains(target)) {
         setMenuOpen(false);
-        setContextMenu(null);
-      } else if (!(target instanceof HTMLElement && target.closest('[data-context-menu]'))) {
-        setContextMenu(null);
       }
     };
 
@@ -93,13 +87,6 @@ export default function App(): JSX.Element {
       }
     };
   }, []);
-
-  const reloadPanels = async (): Promise<void> => {
-    const result = await window.dockAPI.listPanels();
-    if (result.ok) {
-      setPanels(result.data);
-    }
-  };
 
   const handleHoverPanel = (id: string): void => {
     if (!config || dragging) {
@@ -124,19 +111,17 @@ export default function App(): JSX.Element {
 
   const handleActivatePanel = async (id: string): Promise<void> => {
     setMenuOpen(false);
-    setContextMenu(null);
     if (hoverTimerRef.current) {
       window.clearTimeout(hoverTimerRef.current);
     }
     const result = await window.dockAPI.showPanel(id);
     if (result.ok) {
-      setPanelState((current) => ({ ...current, activePanelId: id }));
+      setPanelState((current) => ({ ...current, activePanelId: id, panelVisible: false }));
     }
   };
 
   const handleHideDock = async (): Promise<void> => {
     setMenuOpen(false);
-    setContextMenu(null);
     await window.dockAPI.hideToTray();
   };
 
@@ -163,19 +148,7 @@ export default function App(): JSX.Element {
   ): void => {
     event.preventDefault();
     setMenuOpen(false);
-    setContextMenu({
-      x: event.clientX,
-      y: event.clientY,
-      panel
-    });
-  };
-
-  const handleRemovePanel = async (id: string): Promise<void> => {
-    const result = await window.dockAPI.removePanel(id);
-    if (result.ok) {
-      setContextMenu(null);
-      await reloadPanels();
-    }
+    void window.dockAPI.openPanelContextMenu(panel.id);
   };
 
   const handleShowBuiltinPlaceholder = (): void => {
@@ -201,6 +174,9 @@ export default function App(): JSX.Element {
   };
 
   const edge = config?.layout.edge ?? panelState.edge ?? 'right';
+  const activeIndicatorPanelId = shouldShowDockActiveIndicator(panelState)
+    ? panelState.activePanelId
+    : null;
 
   return (
     <main
@@ -219,7 +195,7 @@ export default function App(): JSX.Element {
       <div className="absolute inset-x-0 top-0 bottom-[126px]">
         <DockIconList
           panels={panels}
-          activePanelId={panelState.activePanelId}
+          activePanelId={activeIndicatorPanelId}
           highlightedPanelId={highlightedPanelId}
           edge={edge}
           onDragStateChange={setDragging}
@@ -237,7 +213,6 @@ export default function App(): JSX.Element {
           menuOpen={menuOpen}
           onShowAddSite={handleShowBuiltinPlaceholder}
           onToggleMenu={() => {
-            setContextMenu(null);
             setMenuOpen((current) => !current);
           }}
           onHideDock={() => void handleHideDock()}
@@ -258,25 +233,6 @@ export default function App(): JSX.Element {
             window.alert(`${APP_NAME}\n版本 ${APP_VERSION}\nM2 阶段占位入口`);
           }}
         />
-      ) : null}
-
-      {contextMenu ? (
-        <div
-          data-context-menu
-          className="absolute z-30 min-w-[146px] rounded-lg border border-white/8 bg-[#2D2D2D] p-1 shadow-[0_4px_16px_rgba(0,0,0,0.3)]"
-          style={{
-            left: edge === 'right' ? -154 : 52,
-            top: Math.min(contextMenu.y, window.innerHeight - 54)
-          }}
-        >
-          <button
-            type="button"
-            className="flex w-full items-center rounded-md px-3 py-2 text-left text-sm text-white transition-colors hover:bg-white/8"
-            onClick={() => void handleRemovePanel(contextMenu.panel.id)}
-          >
-            从边栏取消固定
-          </button>
-        </div>
       ) : null}
 
       <span className="sr-only">{config ? `Dock ready on ${edge} edge` : 'Dock loading'}</span>

@@ -1,40 +1,91 @@
-import { access } from 'node:fs/promises';
 import { constants as fsConstants } from 'node:fs';
+import { access } from 'node:fs/promises';
+import { join } from 'node:path';
 import type { BrowserInfo } from '../../shared/types';
 
-const CANDIDATE_BROWSERS: Array<{ name: string; path: string }> = [
+interface BrowserCandidate {
+  id: string;
+  name: string;
+  paths: string[];
+}
+
+const localAppData = process.env.LOCALAPPDATA ?? 'C:\\Users\\Public\\AppData\\Local';
+
+const BROWSER_CANDIDATES: BrowserCandidate[] = [
   {
+    id: 'msedge',
     name: 'Microsoft Edge',
-    path: 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe'
+    paths: [
+      'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+      'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+      join(localAppData, 'Microsoft', 'Edge', 'Application', 'msedge.exe')
+    ]
   },
   {
+    id: 'chrome',
     name: 'Google Chrome',
-    path: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
+    paths: [
+      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+      join(localAppData, 'Google', 'Chrome', 'Application', 'chrome.exe')
+    ]
   },
   {
+    id: 'firefox',
     name: 'Mozilla Firefox',
-    path: 'C:\\Program Files\\Mozilla Firefox\\firefox.exe'
+    paths: [
+      'C:\\Program Files\\Mozilla Firefox\\firefox.exe',
+      'C:\\Program Files (x86)\\Mozilla Firefox\\firefox.exe'
+    ]
   },
   {
+    id: 'brave',
     name: 'Brave',
-    path: 'C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe'
+    paths: [
+      'C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe',
+      join(localAppData, 'BraveSoftware', 'Brave-Browser', 'Application', 'brave.exe')
+    ]
+  },
+  {
+    id: 'opera',
+    name: 'Opera',
+    paths: [
+      join(localAppData, 'Programs', 'Opera', 'launcher.exe'),
+      'C:\\Program Files\\Opera\\launcher.exe'
+    ]
   }
 ];
+
+const canExecute = async (filePath: string): Promise<boolean> => {
+  try {
+    await access(filePath, fsConstants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+export const matchBrowserCandidate = (browserSelection: string): BrowserCandidate | null =>
+  BROWSER_CANDIDATES.find(
+    (candidate) =>
+      candidate.id === browserSelection ||
+      candidate.paths.some((candidatePath) => candidatePath.toLowerCase() === browserSelection.toLowerCase())
+  ) ?? null;
 
 export class BrowserService {
   async listBrowsers(): Promise<BrowserInfo[]> {
     const detected = await Promise.all(
-      CANDIDATE_BROWSERS.map(async (candidate) => {
-        try {
-          await access(candidate.path, fsConstants.X_OK);
-          return {
-            id: candidate.path,
-            name: candidate.name,
-            path: candidate.path
-          } satisfies BrowserInfo;
-        } catch {
+      BROWSER_CANDIDATES.map(async (candidate) => {
+        const executablePath = await this.resolveExecutable(candidate.id);
+        if (!executablePath) {
           return null;
         }
+
+        return {
+          id: candidate.id,
+          name: candidate.name,
+          path: executablePath
+        } satisfies BrowserInfo;
       })
     );
 
@@ -46,5 +97,22 @@ export class BrowserService {
       },
       ...detected.filter((browser): browser is BrowserInfo => Boolean(browser))
     ];
+  }
+
+  async resolveExecutable(browserSelection: string): Promise<string | null> {
+    if (!browserSelection || browserSelection === 'system') {
+      return null;
+    }
+
+    const candidate = matchBrowserCandidate(browserSelection);
+    if (candidate) {
+      for (const executablePath of candidate.paths) {
+        if (await canExecute(executablePath)) {
+          return executablePath;
+        }
+      }
+    }
+
+    return (await canExecute(browserSelection)) ? browserSelection : null;
   }
 }

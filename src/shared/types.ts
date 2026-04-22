@@ -12,6 +12,7 @@ export interface WebPanelConfig {
 
 export interface BuiltinPanelConfig {
   widgetId: string;
+  targetPanelId?: string;
 }
 
 export interface IconSource {
@@ -59,6 +60,7 @@ export interface AppConfig {
 
 export interface PanelState {
   activePanelId: string | null;
+  panelVisible: boolean;
   pinned: boolean;
   edge: Edge;
 }
@@ -101,6 +103,7 @@ export interface PanelNavigationPayload {
 export interface PanelMenuState {
   panelId: string;
   currentUrl: string;
+  title: string;
   userAgentMode: 'desktop' | 'mobile';
   notificationsSnoozed: boolean;
   canOpenExternal: boolean;
@@ -126,7 +129,14 @@ export interface PanelOpenExternalPayload extends PanelActionPayload {
 }
 
 export interface PanelMenuActionPayload extends PanelActionPayload {
-  action: 'reload' | 'copy-link' | 'toggle-mobile-view' | 'toggle-notifications-snooze';
+  action:
+    | 'reload'
+    | 'copy-link'
+    | 'toggle-mobile-view'
+    | 'toggle-notifications-snooze'
+    | 'open-edit-site'
+    | 'clear-site-data'
+    | 'open-site-info';
 }
 
 export interface PanelCreatePayload {
@@ -135,6 +145,13 @@ export interface PanelCreatePayload {
   iconSource: IconSource;
   preferredWidth: number;
   web: WebPanelConfig;
+}
+
+export interface PanelUpdatePayload {
+  id: string;
+  patch: Partial<Pick<PanelDescriptor, 'title' | 'iconSource' | 'preferredWidth'>> & {
+    web?: Partial<WebPanelConfig>;
+  };
 }
 
 export interface PanelsUpdatedPayload {
@@ -160,6 +177,17 @@ export interface BrowserInfo {
   name: string;
   path?: string;
   isDefault?: boolean;
+}
+
+export interface SiteInfo {
+  panelId: string;
+  title: string;
+  currentUrl: string;
+  userAgentMode: 'desktop' | 'mobile';
+  notificationsSnoozed: boolean;
+  cookieCount: number;
+  cacheSizeBytes: number;
+  customIconPath?: string;
 }
 
 export interface IpcSuccess<T> {

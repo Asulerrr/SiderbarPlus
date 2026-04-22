@@ -1,18 +1,25 @@
 import { BrowserWindow, screen } from 'electron';
 import { join } from 'node:path';
 import { IPC_CHANNELS } from '../../shared/ipc-contracts';
+import {
+  getPanelMenuWindowSize,
+  PANEL_MENU_ITEM_COUNT,
+  PANEL_MENU_SEPARATOR_COUNT
+} from '../../shared/menuLayout';
 import type { PanelMenuOpenPayload } from '../../shared/types';
 
-const MENU_WIDTH = 196;
-const MENU_HEIGHT = 138;
+const MENU_SIZE = getPanelMenuWindowSize({
+  itemCount: PANEL_MENU_ITEM_COUNT,
+  separatorCount: PANEL_MENU_SEPARATOR_COUNT
+});
 
 export class PanelMenuWindow {
   private window: BrowserWindow | null = null;
 
   create(): BrowserWindow {
     this.window = new BrowserWindow({
-      width: MENU_WIDTH,
-      height: MENU_HEIGHT,
+      width: MENU_SIZE.width,
+      height: MENU_SIZE.height,
       frame: false,
       transparent: true,
       show: false,
@@ -61,22 +68,22 @@ export class PanelMenuWindow {
       y: Math.round(payload.y)
     });
     const { workArea } = display;
-    const preferredX = payload.edge === 'right' ? payload.x - MENU_WIDTH : payload.x;
+    const preferredX = payload.edge === 'right' ? payload.x - MENU_SIZE.width : payload.x;
     const preferredY = payload.y;
     const x = Math.min(
       Math.max(preferredX, workArea.x),
-      workArea.x + workArea.width - MENU_WIDTH
+      workArea.x + workArea.width - MENU_SIZE.width
     );
     const y = Math.min(
       Math.max(preferredY, workArea.y),
-      workArea.y + workArea.height - MENU_HEIGHT
+      workArea.y + workArea.height - MENU_SIZE.height
     );
 
     this.window.setBounds({
       x: Math.round(x),
       y: Math.round(y),
-      width: MENU_WIDTH,
-      height: MENU_HEIGHT
+      width: MENU_SIZE.width,
+      height: MENU_SIZE.height
     });
     this.window.showInactive();
     this.window.webContents.send(IPC_CHANNELS.panelMenuHydrate, payload);

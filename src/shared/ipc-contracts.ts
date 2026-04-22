@@ -6,6 +6,7 @@ import type {
   IpcResult,
   PanelActionPayload,
   PanelCreatePayload,
+  PanelUpdatePayload,
   PanelMenuAnchor,
   PanelAnimationPayload,
   PanelAnimatePayload,
@@ -17,7 +18,8 @@ import type {
   PanelOpenExternalPayload,
   PanelsUpdatedPayload,
   PanelSnapshotPayload,
-  PanelState
+  PanelState,
+  SiteInfo
 } from './types';
 
 export const IPC_CHANNELS = {
@@ -25,6 +27,7 @@ export const IPC_CHANNELS = {
   configUpdate: 'config:update',
   panelsList: 'panels:list',
   panelsAdd: 'panels:add',
+  panelsUpdate: 'panels:update',
   panelsReorder: 'panels:reorder',
   panelsHover: 'panels:hover',
   panelsShow: 'panels:show',
@@ -36,12 +39,15 @@ export const IPC_CHANNELS = {
   panelsMarkSticky: 'panels:mark-sticky',
   panelsMenuOpen: 'panels:menu-open',
   panelsMenuClose: 'panels:menu-close',
+  panelsMenuCloseAndResumeHover: 'panels:menu-close-and-resume-hover',
   panelsMenuState: 'panels:menu-state',
   panelsMenuAction: 'panels:menu-action',
   panelsOpenExternal: 'panels:open-external',
   panelsGoBack: 'panels:go-back',
   panelsPickIcon: 'panels:pick-icon',
   panelsRemove: 'panels:remove',
+  panelsContextMenu: 'panels:context-menu',
+  panelsGetSiteInfo: 'panels:get-site-info',
   browsersList: 'browsers:list',
   faviconFetch: 'favicon:fetch',
   appHideToTray: 'app:hide-to-tray',
@@ -65,6 +71,7 @@ export interface DockAPI {
   updateConfig: (patch: Partial<AppConfig>) => Promise<IpcResult<AppConfig>>;
   listPanels: () => Promise<IpcResult<AppConfig['panels']>>;
   addPanel: (payload: PanelCreatePayload) => Promise<IpcResult<AppConfig['panels'][number]>>;
+  updatePanel: (payload: PanelUpdatePayload) => Promise<IpcResult<AppConfig['panels'][number]>>;
   reorderPanels: (panelIds: string[]) => Promise<IpcResult<void>>;
   hoverPanel: (id: string) => Promise<IpcResult<void>>;
   showPanel: (id: string) => Promise<IpcResult<void>>;
@@ -72,6 +79,7 @@ export interface DockAPI {
   scheduleHide: () => Promise<IpcResult<void>>;
   cancelHide: () => Promise<IpcResult<void>>;
   removePanel: (id: string) => Promise<IpcResult<void>>;
+  openPanelContextMenu: (id: string) => Promise<IpcResult<void>>;
   hideToTray: () => Promise<IpcResult<void>>;
   toggleDockVisibility: () => Promise<IpcResult<boolean>>;
   onPanelState: (callback: (state: PanelState) => void) => () => void;
@@ -81,9 +89,11 @@ export interface DockAPI {
 export interface PanelAPI {
   readConfig: () => Promise<IpcResult<AppConfig>>;
   addPanel: (payload: PanelCreatePayload) => Promise<IpcResult<AppConfig['panels'][number]>>;
+  updatePanel: (payload: PanelUpdatePayload) => Promise<IpcResult<AppConfig['panels'][number]>>;
   listBrowsers: () => Promise<IpcResult<BrowserInfo[]>>;
   fetchFavicon: (payload: FaviconFetchPayload) => Promise<IpcResult<FaviconFetchResult>>;
   pickIcon: () => Promise<IpcResult<string | null>>;
+  getSiteInfo: (payload: PanelActionPayload) => Promise<IpcResult<SiteInfo>>;
   minimizePanel: () => Promise<IpcResult<void>>;
   closePanel: () => Promise<IpcResult<void>>;
   markSticky: () => Promise<IpcResult<void>>;
@@ -91,6 +101,7 @@ export interface PanelAPI {
   cancelHide: () => Promise<IpcResult<void>>;
   openMenu: (payload: PanelMenuAnchor) => Promise<IpcResult<void>>;
   closeMenu: () => Promise<IpcResult<void>>;
+  closeMenuAndResumeHover: () => Promise<IpcResult<void>>;
   getMenuState: (payload: PanelActionPayload) => Promise<IpcResult<PanelMenuState>>;
   runMenuAction: (payload: PanelMenuActionPayload) => Promise<IpcResult<PanelMenuState>>;
   openExternal: (payload: PanelOpenExternalPayload) => Promise<IpcResult<void>>;
@@ -115,6 +126,8 @@ export interface PanelAnimationAPI {
 
 export interface PanelMenuAPI {
   runMenuAction: (payload: PanelMenuActionPayload) => Promise<IpcResult<PanelMenuState>>;
+  getSiteInfo: (payload: PanelActionPayload) => Promise<IpcResult<SiteInfo>>;
   closeMenu: () => Promise<IpcResult<void>>;
+  closeMenuAndResumeHover: () => Promise<IpcResult<void>>;
   onHydrate: (callback: (payload: PanelMenuOpenPayload) => void) => () => void;
 }

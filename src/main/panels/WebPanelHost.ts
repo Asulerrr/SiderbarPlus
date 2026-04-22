@@ -6,8 +6,10 @@ import type {
   PanelDescriptor,
   PanelMenuState,
   PanelNavigationPayload,
+  SiteInfo,
   WebPanelConfig
 } from '../../shared/types';
+import { BrowserService } from '../services/BrowserService';
 import { logger } from '../utils/logger';
 
 const SHARED_PARTITION = 'persist:shared';
@@ -28,6 +30,7 @@ export class WebPanelHost {
   private readonly views = new Map<string, WebContentsView>();
   private readonly meta = new Map<string, ViewMeta>();
   private readonly sharedSession = session.fromPartition(SHARED_PARTITION, { cache: true });
+  private readonly browserService = new BrowserService();
   private currentConfig: AppConfig | null = null;
   private downloadsBound = false;
   private permissionsBound = false;
@@ -105,6 +108,7 @@ export class WebPanelHost {
 
     return {
       panelId,
+      title: descriptor.title,
       currentUrl: this.getCurrentUrl(panelId, descriptor.web.url),
       userAgentMode: descriptor.web.userAgentMode,
       notificationsSnoozed: descriptor.web.notificationsSnoozed ?? false,
@@ -162,6 +166,47 @@ export class WebPanelHost {
     return this.getMenuState(panelId);
   }
 
+  async clearSiteData(panelId: string): Promise<PanelMenuState | null> {
+    const config = await this.getFreshConfig();
+    const descriptor = config.panels.find((panel) => panel.id === panelId);
+    if (!descriptor?.web) {
+      return null;
+    }
+
+    const currentUrl = this.getCurrentUrl(panelId, descriptor.web.url);
+    const origin = new URL(currentUrl).origin;
+
+    await this.sharedSession.clearStorageData({ origin });
+    await this.sharedSession.cookies.flushStore();
+    this.getView(panelId)?.webContents.reload();
+
+    return this.getMenuState(panelId);
+  }
+
+  async getSiteInfo(panelId: string): Promise<SiteInfo | null> {
+    const config = await this.getFreshConfig();
+    const descriptor = config.panels.find((panel) => panel.id === panelId);
+    if (!descriptor?.web) {
+      return null;
+    }
+
+    const currentUrl = this.getCurrentUrl(panelId, descriptor.web.url);
+    const cookies = await this.sharedSession.cookies.get({ url: currentUrl }).catch(() => []);
+    const cacheSizeBytes = await this.sharedSession.getCacheSize().catch(() => 0);
+
+    return {
+      panelId,
+      title: descriptor.title,
+      currentUrl,
+      userAgentMode: descriptor.web.userAgentMode,
+      notificationsSnoozed: descriptor.web.notificationsSnoozed ?? false,
+      cookieCount: cookies.length,
+      cacheSizeBytes,
+      customIconPath:
+        descriptor.iconSource.kind === 'custom' ? descriptor.iconSource.path : undefined
+    };
+  }
+
   async openExternal(panelId: string, requestedUrl?: string): Promise<void> {
     const config = await this.getFreshConfig();
     const descriptor = config.panels.find((panel) => panel.id === panelId);
@@ -178,7 +223,12 @@ export class WebPanelHost {
     }
 
     try {
-      const child = spawn(browserTarget, [targetUrl], {
+      const executablePath = await this.browserService.resolveExecutable(browserTarget);
+      if (!executablePath) {
+        throw new Error(`Browser executable not found for ${browserTarget}`);
+      }
+
+      const child = spawn(executablePath, [targetUrl], {
         detached: true,
         stdio: 'ignore'
       });

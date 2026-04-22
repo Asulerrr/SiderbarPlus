@@ -19,6 +19,7 @@ export class WindowManager {
     private readonly configStore: ConfigStore,
     private readonly emitPanelState: (state: {
       activePanelId: string | null;
+      panelVisible: boolean;
       pinned: boolean;
       edge: 'left' | 'right';
     }) => void
@@ -105,9 +106,20 @@ export class WindowManager {
 
   async runPanelMenuAction(
     panelId: string,
-    action: 'reload' | 'copy-link' | 'toggle-mobile-view' | 'toggle-notifications-snooze'
+    action:
+      | 'reload'
+      | 'copy-link'
+      | 'toggle-mobile-view'
+      | 'toggle-notifications-snooze'
+      | 'open-edit-site'
+      | 'clear-site-data'
+      | 'open-site-info'
   ) {
     return this.panelManager?.runMenuAction(panelId, action) ?? null;
+  }
+
+  async getSiteInfo(panelId: string) {
+    return this.panelManager?.getSiteInfo(panelId) ?? null;
   }
 
   async openPanelExternal(panelId: string, url?: string): Promise<void> {
@@ -126,11 +138,19 @@ export class WindowManager {
     this.panelManager?.closeMenu();
   }
 
+  closePanelMenuAndResumeHover(): void {
+    this.panelManager?.closeMenuAndResumeHover();
+  }
+
   markPanelSticky(): void {
     this.panelManager?.markSticky();
   }
 
   getActivePanelId(): string | null {
     return this.panelManager?.getCurrentPanelId() ?? null;
+  }
+
+  destroyPanelView(panelId: string): void {
+    this.panelManager?.destroyPanelView(panelId);
   }
 }

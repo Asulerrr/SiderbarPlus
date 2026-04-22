@@ -8,6 +8,8 @@ export const PANEL_DEFAULT_WIDTH = 456;
 export const DOCK_BACKGROUND = '#1F1F1F';
 export const BUILTIN_ADD_SITE_ID = 'builtin:add-site';
 export const BUILTIN_SETTINGS_ID = 'builtin:settings';
+export const BUILTIN_EDIT_SITE_PREFIX = 'builtin:edit-site:';
+export const BUILTIN_SITE_INFO_PREFIX = 'builtin:site-info:';
 
 export const DEFAULT_CONFIG = (): AppConfig => {
   const now = new Date().toISOString();

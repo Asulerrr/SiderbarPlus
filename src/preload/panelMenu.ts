@@ -3,7 +3,9 @@ import { IPC_CHANNELS, type PanelMenuAPI } from '../shared/ipc-contracts';
 
 const panelMenuAPI: PanelMenuAPI = {
   runMenuAction: (payload) => ipcRenderer.invoke(IPC_CHANNELS.panelsMenuAction, payload),
+  getSiteInfo: (payload) => ipcRenderer.invoke(IPC_CHANNELS.panelsGetSiteInfo, payload),
   closeMenu: () => ipcRenderer.invoke(IPC_CHANNELS.panelsMenuClose),
+  closeMenuAndResumeHover: () => ipcRenderer.invoke(IPC_CHANNELS.panelsMenuCloseAndResumeHover),
   onHydrate: (callback) => {
     const listener = (
       _event: Electron.IpcRendererEvent,
