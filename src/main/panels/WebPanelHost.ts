@@ -255,7 +255,7 @@ export class WebPanelHost {
     }
 
     await this.updatePanelWebConfig(panelId, {
-      zoomLevel: Number(view.webContents.getZoomFactor().toFixed(2))
+      zoomFactor: Number(view.webContents.getZoomFactor().toFixed(2))
     });
   }
 
@@ -353,7 +353,7 @@ export class WebPanelHost {
       webConfig.userAgentMode === 'mobile' ? MOBILE_USER_AGENT : defaultUserAgent;
 
     view.webContents.setUserAgent(nextUserAgent);
-    view.webContents.setZoomFactor(webConfig.zoomLevel || 1);
+    view.webContents.setZoomFactor(webConfig.zoomFactor || 1);
   }
 
   private bindSessionHandlers(): void {

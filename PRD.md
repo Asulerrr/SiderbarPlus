@@ -49,7 +49,6 @@ Microsoft Edge 的 Edge Bar（桌面版边栏）是一个高效的工作流工�
 | 构建工具 | Vite | `^5.4.0` | 快速 HMR |
 | Electron 集成 | `electron-vite` | `^3.0.0` | 多进程构建最成熟方案 |
 | 打包 | `electron-builder` | `^25.0.0` | NSIS 安装器 |
-| Win32 FFI | `koffi` | `^2.8.0` | 现代 FFI，调用 `SHAppBarMessage` |
 | 状态管理 | `zustand` | `^5.0.0` | 轻量，Codex 友好 |
 | 日志 | `electron-log` | `^5.2.0` | 分级 + 文件滚动 |
 | 开机自启 | `auto-launch` | `^5.0.6` | 注册表 Run 键封装 |
@@ -57,9 +56,9 @@ Microsoft Edge 的 Edge Bar（桌面版边栏）是一个高效的工作流工�
 | 图标 | `lucide-react` | `^0.460.0` | 内置标题栏 UI 图标 |
 
 ### 2.1 禁止使用
-- `node-ffi-napi`（已弃用，用 `koffi` 替代）
+- `node-ffi-napi`
 - `electron-forge`（与本 PRD 的 `electron-vite + electron-builder` 方案冲突）
-- 任何需要 node-gyp 编译的原生模块（除 koffi 外）
+- 非必要的 Win32 FFI / 原生模块。v1.0 默认不引入 AppBar 级系统保留区能力；若未来恢复此方案，须先通过单独设计评审。
 
 ---
 
@@ -71,7 +70,7 @@ Microsoft Edge 的 Edge Bar（桌面版边栏）是一个高效的工作流工�
 ┌─────────────────────────────────────────────────────┐
 │                   Main Process                      │
 │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐    │
-│  │WindowManager│ │ConfigStore  │ │ AppBarCtrl  │    │
+│  │WindowManager│ │ConfigStore  │ │PanelManager │    │
 │  └─────────────┘ └─────────────┘ └─────────────┘    │
 │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐    │
 │  │PanelRegistry│ │ TrayManager │ │FullscreenDet│    │
@@ -90,6 +89,7 @@ Microsoft Edge 的 Edge Bar（桌面版边栏）是一个高效的工作流工�
 **关键设计**：
 - **DockWindow**：独立 BrowserWindow，始终存在，宽 44px，垂直占满屏幕高度
 - **PanelWindow**：独立 BrowserWindow，含标题栏 UI（渲染进程）+ 一个 `WebContentsView` 容器区域
+- **可选辅助窗口**：允许存在单独的 `PanelAnimationWindow`、`PanelMenuWindow` 等非主交互窗口，用于动画/菜单层级问题。它们不改变 Dock 与 Panel 的主职责划分
 - **每个站点**拥有一个 `WebContentsView` 实例，被添加到 PanelWindow 的 contentView 树中
 - **切换站点** = 改变 PanelWindow 当前显示的 WebContentsView（非销毁重建）
 
@@ -105,7 +105,7 @@ export interface PanelDescriptor {
   title: string;                 // 显示名
   iconSource: IconSource;        // 图标来源
   order: number;                 // 排序权重
-  preferredWidth: number;        // 面板宽度（默认 456）
+  preferredWidth: number;        // 面板宽度（v1.0 默认跟随全局宽度；v2 可扩展为站点级独立宽度）
   web?: WebPanelConfig;
   builtin?: BuiltinPanelConfig;
 }
@@ -113,7 +113,7 @@ export interface PanelDescriptor {
 export interface WebPanelConfig {
   url: string;                   // 完整 URL（含 scheme）
   openInBrowser: string;         // 外开目标浏览器 ID，'system' = 系统默认
-  zoomLevel: number;             // 缩放，默认 1.0
+  zoomFactor: number;            // 缩放因子，默认 1.0
   userAgentMode: 'desktop' | 'mobile';
 }
 
@@ -129,41 +129,65 @@ export interface IconSource {
 }
 ```
 
-**内置面板**（v1 实现两个）：
+**内置面板**（v1 实现）：
 - `builtin:add-site` — 添加网页面板（由底部 `+` 触发，**不出现在 Dock 图标列表中**）
 - `builtin:settings` — 设置面板（由 `⋮` 菜单里的"设置"项触发）
+- `builtin:edit-site:<panelId>` — 编辑站点内置面板
+- `builtin:site-info:<panelId>` — 站点信息内置面板
 
-内置面板同样经过 PanelWindow 渲染，区别是它们的内容不是 WebContentsView，而是 PanelWindow 的渲染进程内直接渲染的 React 组件。
+内置面板同样经过 PanelWindow 渲染，区别是它们的内容不是 WebContentsView，而是 PanelWindow 的渲染进程内直接渲染的 React 组件。v1.0 不要求为每个内置面板分拆独立 renderer 入口，允许在 `panel-chrome` 渲染树内部按 `builtin.widgetId` 分支渲染。
 
 ### 3.3 IPC 通信协议
 
-**命名约定**：`<domain>:<action>`，全部双向都通过 `ipcMain.handle` + `ipcRenderer.invoke`（Promise 化）。
+**命名约定**：`<domain>:<action>`，请求型 IPC 统一通过 `ipcMain.handle` + `ipcRenderer.invoke`（Promise 化）。
+
+**返回约定**：
+- 所有请求型 IPC 统一返回 `IpcResult<T>`
+- 成功：`{ ok: true, data: T }`
+- 失败：`{ ok: false, error: string }`
+- 推送型事件（如 `panel:state`）不走 `IpcResult`
 
 | Channel | 方向 | Payload | 返回 |
 |---|---|---|---|
-| `config:read` | R→M | `void` | `AppConfig` |
-| `config:update` | R→M | `Partial<AppConfig>` | `AppConfig` |
-| `panels:list` | R→M | `void` | `PanelDescriptor[]` |
-| `panels:add` | R→M | `Omit<PanelDescriptor, 'id' \| 'order'>` | `PanelDescriptor` |
-| `panels:update` | R→M | `{ id, patch: Partial<PanelDescriptor> }` | `PanelDescriptor` |
-| `panels:remove` | R→M | `{ id }` | `void` |
-| `panels:reorder` | R→M | `string[]` (id 数组新顺序) | `void` |
-| `panels:show` | R→M | `{ id }` | `void` |
-| `panels:hide` | R→M | `void` | `void` |
-| `panels:pin` | R→M | `{ pinned: boolean }` | `void` |
-| `panels:reload` | R→M | `{ id }` | `void` |
-| `panels:destroy` | R→M | `{ id }` | `void` (仅销毁 WebContentsView，保留配置) |
-| `panels:open-external` | R→M | `{ id }` | `void` |
-| `panels:copy-url` | R→M | `{ id }` | `void` |
-| `panels:clear-data` | R→M | `{ id }` | `void` |
-| `panels:toggle-ua` | R→M | `{ id }` | `void` |
-| `dock:switch-edge` | R→M | `{ edge: 'left' \| 'right' }` | `void` |
-| `app:quit` | R→M | `void` | `void` |
-| `app:hide-to-tray` | R→M | `void` | `void` |
-| `app:check-update` | R→M | `void` | `{ hasUpdate, latest, url }` |
-| `browsers:list` | R→M | `void` | `BrowserInfo[]` |
-| `favicon:fetch` | R→M | `{ url }` | `{ dataUrl }` |
-| `panel:state` | M→R | (push) `{ activePanelId, pinned, edge }` | — |
+| `config:read` | R→M | `void` | `IpcResult<AppConfig>` |
+| `config:update` | R→M | `Partial<AppConfig>` | `IpcResult<AppConfig>` |
+| `panels:list` | R→M | `void` | `IpcResult<PanelDescriptor[]>` |
+| `panels:add` | R→M | `Omit<PanelDescriptor, 'id' \| 'order'>` | `IpcResult<PanelDescriptor>` |
+| `panels:update` | R→M | `{ id, patch: Partial<PanelDescriptor> }` | `IpcResult<PanelDescriptor>` |
+| `panels:remove` | R→M | `{ id }` | `IpcResult<void>` |
+| `panels:reorder` | R→M | `string[]` (id 数组新顺序) | `IpcResult<void>` |
+| `panels:hover` | R→M | `{ id }` | `IpcResult<void>` |
+| `panels:show` | R→M | `{ id }` | `IpcResult<void>` |
+| `panels:hide` | R→M | `void` | `IpcResult<void>` |
+| `panels:schedule-hide` | R→M | `void` | `IpcResult<void>` |
+| `panels:cancel-hide` | R→M | `void` | `IpcResult<void>` |
+| `panels:minimize` | R→M | `void` | `IpcResult<void>` |
+| `panels:close` | R→M | `void` | `IpcResult<void>` |
+| `panels:mark-sticky` | R→M | `void` | `IpcResult<void>` |
+| `panels:menu-open` | R→M | `PanelMenuAnchor` | `IpcResult<void>` |
+| `panels:menu-close` | R→M | `void` | `IpcResult<void>` |
+| `panels:menu-close-and-resume-hover` | R→M | `void` | `IpcResult<void>` |
+| `panels:menu-state` | R→M | `{ panelId }` | `IpcResult<PanelMenuState>` |
+| `panels:menu-action` | R→M | `PanelMenuActionPayload` | `IpcResult<PanelMenuState>` |
+| `panels:open-external` | R→M | `{ panelId, url? }` | `IpcResult<void>` |
+| `panels:go-back` | R→M | `{ panelId }` | `IpcResult<void>` |
+| `panels:pick-icon` | R→M | `void` | `IpcResult<string \| null>` |
+| `panels:context-menu` | R→M | `{ id }` | `IpcResult<void>` |
+| `panels:get-site-info` | R→M | `{ panelId }` | `IpcResult<SiteInfo>` |
+| `app:hide-to-tray` | R→M | `void` | `IpcResult<void>` |
+| `app:toggle-dock-visibility` | R→M | `void` | `IpcResult<boolean>` |
+| `browsers:list` | R→M | `void` | `IpcResult<BrowserInfo[]>` |
+| `favicon:fetch` | R→M | `{ url }` | `IpcResult<FaviconFetchResult>` |
+| `panel:state` | M→R | (push) `{ activePanelId, panelVisible, pinned, edge }` | — |
+| `panels:updated` | M→R | (push) `PanelsUpdatedPayload` | — |
+| `panel:animate-in` | M→R | (push) `PanelAnimatePayload` | — |
+| `panel:animate-out` | M→R | (push) `void` | — |
+| `panel-animation:open` | M→R | (push) `PanelAnimationPayload` | — |
+| `panel-animation:close` | M→R | (push) `PanelAnimationPayload` | — |
+| `panel-animation:reset` | M→R | (push) `void` | — |
+| `chrome:fade-out` | M→R | (push) `void` | — |
+| `chrome:fade-in` | M→R | (push) `PanelChromePayload` | — |
+| `panel:navigation-state` | M→R | (push) `PanelNavigationPayload` | — |
 
 ### 3.4 Preload 脚本
 
@@ -398,7 +422,7 @@ export interface AppConfig {
 
 **关闭 vs 最小化 的关键区别**：
 - **最小化** (`Minus`)：等同于鼠标移出触发的关闭，WebContentsView 继续存在于内存，音视频继续（依据 `keepAudioOnHide`）
-- **关闭** (`X`)：调用 `panels:destroy`，销毁该站点的 WebContentsView，释放内存。**不从 Dock 中移除图标**。下次悬停该图标时重新创建 WebContentsView 并导航到 `url`
+- **关闭** (`X`)：通过关闭动作销毁该站点的 WebContentsView，释放内存。**不从 Dock 中移除图标**。下次悬停该图标时重新创建 WebContentsView 并导航到 `url`
 
 **地址栏**（标题栏下方一行）：
 - 显示当前 WebContentsView 的实际 URL（随页面内导航更新）
@@ -415,43 +439,42 @@ export interface AppConfig {
 | 刷新 | `RotateCw` | 调用 `webContents.reload()` |
 | 复制链接 | `Link` | 将当前 URL 写入系统剪贴板 |
 | 显示移动视图 | `Smartphone` | 复选项，切换 UserAgent（桌面 ⇄ 移动版 iPhone UA），切换后刷新页面 |
+| 推迟通知 / 取消推迟通知 | `BellOff` | 复选项。切换当前站点的通知静默状态，不影响其他站点 |
 | ─── 分隔线 ─── | | |
 | 编辑此站点 | `Pencil` | 打开一个编辑对话框（与添加网页面板同构，但预填当前值） |
 | 清除此站点数据 | `Trash2` | 弹确认框 "清除 [站点] 的所有 Cookie 和缓存？"，确认后调用 `session.clearStorageData({ origin: <url> })` |
-| 站点信息 | `Info` | 打开"站点信息"子面板，显示：URL / 当前 UA / Cookie 数量 / 缓存大小 / 已授权通知状态 |
+| 站点信息 | `Info` | 打开"站点信息"子面板，显示：URL / 当前 UA / Cookie 数量 / 缓存大小 / 当前通知状态 |
 
 **菜单样式**：黑色背景（`#2D2D2D`），白色文字，项高 32px，圆角 8px，阴影同全局菜单。
 
-### 5.7 固定模式（AppBar）
+### 5.7 固定模式（Pinned Surface）
 
 #### 5.7.1 激活
 - 用户点击面板标题栏的 **📌** 按钮
-- 立即调用 Win32 AppBar API 注册为 AppBar（见第 7 节）
-- Windows 自动**挤压桌面工作区**：最大化的其他窗口会避让
-- 面板变为**永久可见**，悬停交互**停用**
-- 调用 `panels:pin` IPC，更新 `config.layout.pinned = true`
+- 面板切换为**固定展示态**：永久可见、悬停开关逻辑停用
+- v1.0 **不要求也不允许**通过 Win32 AppBar / `SHAppBarMessage` 挤压系统工作区
+- 固定态仍是普通置顶窗口，不改变其他应用的最大化区域
+- 调用固定模式切换逻辑，更新 `config.layout.pinned = true`
 
 #### 5.7.2 固定态下的特殊行为
 - 面板**常驻**，不再自动关闭
-- Dock 仍然存在，用户可以**切换到其他站点**（面板内容替换，AppBar 保持）
-- 点击其他图标 → WebContentsView 切换，**不退出 AppBar 模式**
-- 点击 `+` → 打开"添加网页"面板，**也在 AppBar 内展示**
+- Dock 仍然存在，用户可以**切换到其他站点**（面板内容替换，固定态保持）
+- 点击其他图标 → WebContentsView 切换，**不退出固定模式**
+- 点击 `+` → 打开"添加网页"面板，**也在固定模式内展示**
 - 可**拖拽面板内边缘**调整宽度（见 5.7.3）
 - 面板宽度变化 → 全局 `panelDefaultWidth` 配置更新（与悬停模式共用同一宽度值）
 
 #### 5.7.3 边缘拖拽改宽度
-- AppBar 模式下，面板内侧边缘 4px 区域光标变为 `ew-resize`
+- 固定模式下，面板内侧边缘 4px 区域光标变为 `ew-resize`
 - 最小宽度 **320px**，最大宽度 **= 当前显示器工作区宽度 × 0.5**
 - **拖拽过程**：仅用 CSS 改变 panel-chrome 的视觉宽度（见 §5.14.3）
-- **松开鼠标（mouseup）时**：一次性执行 `BrowserWindow.setBounds` + `SHAppBarMessage(ABM_SETPOS)` + `WebContentsView.setBounds` + 持久化到 `config.layout.panelDefaultWidth`
-- **严禁在 mousemove 过程中调用 `setBounds` 或 `SHAppBarMessage`**——这会导致整个桌面的其他窗口疯狂避让，视觉上全屏乱跳
+- **松开鼠标（mouseup）时**：一次性执行 `BrowserWindow.setBounds` + `WebContentsView.setBounds` + 持久化到 `config.layout.panelDefaultWidth`
+- **严禁在 mousemove 过程中调用 `setBounds`**，避免窗口抖动与系统重排
 
 > ⚠️ **完整实现模板见 §5.14.3。** 此处只描述用户感知的行为。
 
 #### 5.7.4 取消固定
 - 点击标题栏 **📌** 按钮（变为 PinOff 图标）
-- 调用 `SHAppBarMessage(ABM_REMOVE)` 释放 AppBar 占位
-- 桌面其他窗口的最大化区域恢复
 - 面板回到悬停模式（当前面板关闭动画收起）
 - `config.layout.pinned = false`
 
@@ -463,7 +486,7 @@ export interface AppConfig {
 不提供快捷键（v1 低频操作）。
 
 #### 5.8.2 切换过程
-1. 若当前为 AppBar 模式 → 先取消固定
+1. 若当前为固定模式 → 先取消固定
 2. Dock 窗口 `hide()`
 3. 所有面板关闭
 4. 重新计算 Dock 位置（x 坐标从 `workArea.x + workArea.width - 44` 变为 `workArea.x`，或反之）
@@ -556,8 +579,8 @@ session.fromPartition('persist:shared', { cache: true })
 - **站点"关闭"操作（× 销毁 WebContentsView）** 无论 `keepAudioOnHide` 如何都会终止播放
 
 #### 5.10.6 缩放记忆
-- 面板打开时应用 `webContents.setZoomLevel(config.zoomLevel)`
-- 监听 `webContents.on('zoom-changed')` → 更新该 Panel 的 `WebPanelConfig.zoomLevel` 并持久化
+- 面板打开时应用 `webContents.setZoomFactor(config.zoomFactor)`
+- 监听缩放变化 → 更新该 Panel 的 `WebPanelConfig.zoomFactor` 并持久化
 - Ctrl+0 重置到 1.0
 
 ### 5.11 内置面板：添加网页
@@ -632,18 +655,23 @@ session.fromPartition('persist:shared', { cache: true })
 
 1. **窗口不做动画，CSS 做动画。** 视觉上的滑动、淡入、宽度变化一律由渲染进程 CSS `transition` 完成。
 2. **`BrowserWindow.setBounds` 只在"状态转换瞬间"调用，绝不在动画过程中重复调用。** 一次动画生命周期内 `setBounds` 调用次数必须 ≤ 2（入口各一次）。
-3. **`SHAppBarMessage` 比 `setBounds` 更重**，每次调用会让 Windows 重排**所有最大化窗口**。绝不在 mousemove 或 RAF 循环中调用。
+3. **固定模式拖拽期间不改原生窗口几何。** mousemove / RAF 期间只改 CSS；`BrowserWindow.setBounds` 与 `WebContentsView.setBounds` 只在 mouseup 时提交一次。
 4. **WebContentsView 不参与 CSS 动画。** 它是原生 View，不支持 opacity / transform。动画期间通过 `setBounds` 到 `(0,0,0,0)` "隐藏"它。
 5. **Dock 窗口一旦定位，生命周期内不再 `setBounds`**。唯一例外：用户切换贴边方向、屏幕分辨率/DPI 变化、任务栏位置变化。
 
 #### 5.14.2 架构前提（窗口拆分）
 
-必须是**两个独立 BrowserWindow**，不得合并：
+必须保留**两个核心交互 BrowserWindow**，且不得合并：
 
 | 窗口 | 职责 | 创建时机 | 销毁时机 |
 |---|---|---|---|
 | `DockWindow` | 图标栏。始终可见。`frame: false, transparent: false, skipTaskbar: true, alwaysOnTop: 'screen-saver'` | 应用启动 | 应用退出 |
 | `PanelWindow` | 面板 chrome（标题栏 + 地址栏）+ WebContentsView 容器。`frame: false, transparent: true, show: false, skipTaskbar: true, alwaysOnTop: 'screen-saver'` | 应用启动 | 应用退出 |
+
+**允许辅助窗口**：
+- `PanelAnimationWindow`：非交互动画快照层，只负责视觉过渡
+- `PanelMenuWindow`：标题栏三点菜单的独立顶层窗口
+- 这类辅助窗口不改变 Dock 与 Panel 的主责任边界，但可用于解决 Electron 分层、透明窗口和顶层菜单问题
 
 **PanelWindow 初始化配置**：
 - `bounds` 一次性设置为"面板完全展开态"的最终位置和宽度（贴 Dock 内侧，高 = 显示器工作区高）
@@ -656,24 +684,18 @@ session.fromPartition('persist:shared', { cache: true })
 ##### 场景 A — 展开面板（从无到有）
 
 ```
-主进程                           渲染进程（panel-chrome）        WebContentsView
-─────                           ──────────────────────         ──────────────
+主进程                           渲染进程（panel-animation）    渲染进程（panel-chrome）      WebContentsView
+─────                           ───────────────────────────    ─────────────────────────      ──────────────
 1. setIgnoreMouseEvents(false)
-2. IPC: panel:animate-in ────▶  3. 收到消息
-                                4. 读取目标 panelId
-                                5. DOM 初始状态已是 translateX(100%)
-                                6. 下一帧添加 .open 类
-                                7. CSS 开始 150ms 过渡 ──────▶  (此期间 view 尚未 attach)
-                                   transform: translateX(100%) → 0
-                                                                 
-8. 主进程 setTimeout(170ms) ───────────────────────────────────▶
-9. 动画完成回调触发
-10. addChildView(view)
-11. view.setBounds({x:0, y:CHROME_H, w:panelW, h:windowH-CHROME_H})
-                                                                 ← 此时 view 一次性出现在正确位置
+2. IPC: panel-animation:open ─▶ 3. 动画快照层开始 150ms 展开
+4. 主进程等待 170ms
+5. IPC: panel:animate-in ───────────────────────────────────▶  6. 标题栏 / 地址栏进入最终态
+7. addChildView(view) ───────────────────────────────────────────────────────────────────────▶
+8. view.setBounds({x:0, y:CHROME_H, w:panelW, h:windowH-CHROME_H})
+9. panelAnimationWindow.reset() ─▶ 10. 动画快照层复位隐藏
 ```
 
-**关键**：WebContentsView 在 CSS 动画**完成之后**才 attach + setBounds。动画期间用户看到的是 chrome（空白 / 上次留存的渲染缓存）在滑入；动画结束瞬间 view 贴上，视觉上是"页面内容出现"。如果动画期间 view 已经在位，它会跟着窗口(或父 view)的位置变化被 Windows 反复重绘，产生抖动。
+**关键**：v1 的展开是**两阶段交接**。第一阶段由独立的 `PanelAnimationWindow` 负责快照层滑出；第二阶段才由 `PanelWindow` 接手真实 chrome 与 WebContentsView。这样可以避免透明窗口、标题栏和网页内容在同一阶段争抢层级与时序，减少双层动画与缩放错觉。
 
 **代码模板**（`PanelManager.showPanel`）：
 
@@ -688,8 +710,8 @@ async showPanel(panelId: string): Promise<void> {
   // 1. 让窗口接受鼠标
   this.panelWindow.setIgnoreMouseEvents(false);
   
-  // 2. 通知渲染层开始动画 + 切标题栏内容
-  this.panelWindow.webContents.send('panel:animate-in', {
+  // 2. 先让 animation window 播放快照层展开
+  this.animationWindow.webContents.send('panel-animation:open', {
     panelId,
     descriptor: this.registry.get(panelId),
   });
@@ -698,7 +720,13 @@ async showPanel(panelId: string): Promise<void> {
   await sleep(170);
   if (this.state !== 'opening' || this.currentPanelId !== panelId) return; // 被打断
   
-  // 4. Attach WebContentsView + setBounds 一次到位
+  // 4. 再切入真实 panel chrome
+  this.panelWindow.webContents.send('panel:animate-in', {
+    panelId,
+    descriptor: this.registry.get(panelId),
+  });
+
+  // 5. Attach WebContentsView + setBounds 一次到位
   if (this.registry.get(panelId).type === 'web') {
     const view = await this.webPanelHost.getOrCreateView(panelId);
     if (!this.panelWindow.contentView.children.includes(view)) {
@@ -707,6 +735,9 @@ async showPanel(panelId: string): Promise<void> {
     const [w, h] = this.panelWindow.getContentSize();
     view.setBounds({ x: 0, y: CHROME_HEIGHT, width: w, height: h - CHROME_HEIGHT });
   }
+
+  // 6. 动画层复位
+  this.animationWindow.webContents.send('panel-animation:reset');
   
   this.state = 'open';
 }
@@ -783,7 +814,7 @@ async switchPanel(toPanelId: string): Promise<void> {
 
 ##### 场景 D — 固定模式拖拽改宽度
 
-**这是最容易出大问题的场景。口诀：拖拽期间只改 CSS，mouseup 才改窗口和 AppBar。**
+**这是最容易出大问题的场景。口诀：拖拽期间只改 CSS，mouseup 才改窗口。**
 
 **渲染进程**（`ResizeHandle.tsx`）：
 
@@ -838,7 +869,6 @@ ipcMain.handle('panel:commit-resize', async (_e, newWidth: number) => {
   
   // 按顺序一次性执行（同一事件循环内）
   panelWindow.setBounds(bounds);
-  appBar.update(panelWindow, edge, newWidth); // 内部调用 ABM_SETPOS 一次
   const view = webPanelHost.getView(currentPanelId);
   if (view) view.setBounds({ x: 0, y: CHROME_HEIGHT, width: newWidth, height: wh - CHROME_HEIGHT });
   
@@ -846,7 +876,7 @@ ipcMain.handle('panel:commit-resize', async (_e, newWidth: number) => {
 });
 ```
 
-**视觉解释**：拖拽时 chrome 实时变宽（流畅），WebContentsView 停在旧宽度（看起来像"chrome 拉出一块新白区"）；mouseup 瞬间 view 和 AppBar 对齐新宽度（< 16ms，人眼不可见跳跃）。**比每帧调用流畅 100 倍**。
+**视觉解释**：拖拽时 chrome 实时变宽（流畅），WebContentsView 停在旧宽度（看起来像"chrome 拉出一块新白区"）；mouseup 瞬间 view 与窗口对齐新宽度（< 16ms，人眼不可见跳跃）。**比每帧调用流畅 100 倍**。
 
 #### 5.14.4 防抖与合并
 
@@ -885,7 +915,7 @@ function onIconLeave(id: string) {
 
 鼠标离开触发 300ms 计时器 → 进入 closing 状态。如果 300ms 内鼠标回到 Dock 或 Panel 区域，**取消计时器，状态回退到 open，不重播动画**。
 
-鼠标进入"Dock + Panel 合并区域"的判定：Dock 和 Panel 各自在渲染层监听 `mouseenter` / `mouseleave`，通过 IPC 报告给主进程，主进程综合两者判定。不要用 `setCapture` / 全局鼠标钩子（复杂度不值）。
+鼠标进入"Dock + Panel 合并区域"的判定：优先使用 Dock / Panel / Menu 的 `mouseenter` / `mouseleave` 上报；若 `WebContentsView` 承载站点导致事件丢失，允许主进程以 60–100ms 轮询 `screen.getCursorScreenPoint()` 作为兜底。不要用 `setCapture` / 全局鼠标钩子（复杂度不值）。
 
 #### 5.14.5 显示器与 DPI 变化
 
@@ -894,7 +924,7 @@ function onIconLeave(id: string) {
   1. 若面板当前展开 → 先 `hidePanel()`
   2. 重新计算 Dock 和 PanelWindow 的目标 bounds（基于新的 `workArea`）
   3. 各自一次性 `setBounds`
-  4. 若之前处于固定模式 → 重新调用 `SHAppBarMessage(ABM_REMOVE)` + `ABM_NEW` + `ABM_SETPOS`
+  4. 若之前处于固定模式 → 重新应用固定态宽度与展开方向
 
 **DPI 变化（`display-metrics-changed` 带 `scaleFactor` 字段）** 同上处理。
 
@@ -922,9 +952,9 @@ function onIconLeave(id: string) {
 |---|---|
 | 用 `setBounds` 做滑动动画 | CSS `transform` 动画 |
 | 动画期间每帧调用 `setBounds` | 动画前后各调用一次 `setBounds` |
-| mousemove 调用 `SHAppBarMessage` | mouseup 才调用 |
+| mousemove 调用原生窗口几何更新 | mouseup 才调用 |
 | 动画期间 WebContentsView 停留在正确位置 | 动画期间 view 收到 `(0,0,0,0)`，结束后回到正确位置 |
-| Dock 和 Panel 合并成一个 BrowserWindow | 两个独立 BrowserWindow |
+| Dock 和 Panel 合并成一个 BrowserWindow | Dock / Panel 保持独立，辅助窗口按需存在 |
 | 切换面板时销毁旧 view、创建新 view | 两个 view 都常驻，只 `setBounds` 切换可见性 |
 | 在 window 收到 `resize` 事件时调用 `setBounds` | 禁止——会造成反馈循环 |
 | 用 `requestAnimationFrame` 轮询窗口位置 | 用 `screen.on('display-metrics-changed')` 事件 |
@@ -934,8 +964,8 @@ function onIconLeave(id: string) {
 当出现抖动问题时，按以下顺序排查：
 
 1. **开启窗口位置日志**：在 `PanelWindow.on('move' / 'resize')` 里打印 bounds 和当前调用栈。若每秒超过 5 条日志 = 有地方在死循环调用 `setBounds`
-2. **开启 SHAppBarMessage 日志**：在 AppBar.ts 里每次调用 `SHAppBarMessage` 打印一行。拖拽一次 resize 操作应只出现一次 `ABM_SETPOS`
-3. **检查 WebContentsView 的 `setBounds` 调用频率**：同样每秒超过 5 次大概率有问题
+2. **检查 WebContentsView 的 `setBounds` 调用频率**：同样每秒超过 5 次大概率有问题
+3. **检查固定模式拖拽提交次数**：一次拖拽只应在 mouseup 时提交一次 `setBounds`
 4. **Windows Spy++** 或 **AccEvent** 观察窗口消息队列，若 `WM_WINDOWPOSCHANGED` 在拖拽时狂刷 = 每帧 `setBounds` 没改掉
 
 ---
@@ -992,54 +1022,7 @@ function onIconLeave(id: string) {
 
 ## 7. Windows 平台集成
 
-### 7.1 AppBar（SHAppBarMessage）
-
-**前置声明**（`src/main/appbar/AppBar.ts`）：
-
-```typescript
-import koffi from 'koffi';
-
-const shell32 = koffi.load('shell32.dll');
-const user32 = koffi.load('user32.dll');
-
-// ABM_NEW = 0x0, ABM_REMOVE = 0x1, ABM_QUERYPOS = 0x2,
-// ABM_SETPOS = 0x3, ABM_SETAUTOHIDEBAR = 0x8
-
-const RECT = koffi.struct('RECT', {
-  left: 'long', top: 'long', right: 'long', bottom: 'long',
-});
-
-const APPBARDATA = koffi.struct('APPBARDATA', {
-  cbSize: 'uint32',
-  hWnd: 'uintptr_t',
-  uCallbackMessage: 'uint32',
-  uEdge: 'uint32',   // ABE_LEFT=0, ABE_TOP=1, ABE_RIGHT=2, ABE_BOTTOM=3
-  rc: RECT,
-  lParam: 'int64',
-});
-
-const SHAppBarMessage = shell32.func(
-  'uintptr_t SHAppBarMessage(uint32 dwMessage, _Inout_ APPBARDATA *pData)'
-);
-```
-
-**注册 AppBar**（`registerAppBar(hwnd, edge, width)`）：
-1. 构造 `APPBARDATA`，`hWnd = hwnd`，`uCallbackMessage = WM_USER + 1`
-2. `SHAppBarMessage(ABM_NEW, &abd)`
-3. 设置 `uEdge = ABE_RIGHT`（或 LEFT）
-4. 设置 `abd.rc` 为目标矩形（屏幕右侧宽 `width` 的纵向条）
-5. `SHAppBarMessage(ABM_QUERYPOS, &abd)` — 系统可能调整
-6. `SHAppBarMessage(ABM_SETPOS, &abd)`
-7. `MoveWindow(hwnd, rc.left, rc.top, rc.right-rc.left, rc.bottom-rc.top, true)`
-
-**释放 AppBar**：`SHAppBarMessage(ABM_REMOVE, &abd)`
-
-**注意事项**：
-- HWND 从 Electron `BrowserWindow.getNativeWindowHandle()` 获取（Windows 上是 Buffer，前 8 字节 = HWND）
-- 监听 Windows 消息 `WM_USER + 1` 的参数为 `ABN_POSCHANGED`（0x1）时重新调用 `ABM_QUERYPOS + ABM_SETPOS`（用户改了任务栏位置等）
-- Electron 原生不支持 WndProc 钩子，v1 使用定时器（每 3 秒）轮询工作区并在必要时重设
-
-### 7.2 浏览器检测（`BrowserService`）
+### 7.1 浏览器检测（`BrowserService`）
 
 **扫描路径**：
 1. `HKLM\SOFTWARE\Clients\StartMenuInternet` 下所有子键
@@ -1050,20 +1033,20 @@ const SHAppBarMessage = shell32.func(
 ```typescript
 interface BrowserInfo {
   id: string;                // 规范化 ID（如 'chrome' / 'msedge' / 'firefox'）
-  displayName: string;       // 显示名
-  executablePath: string;    // 完整路径
-  isDefault: boolean;        // 是否系统默认
+  name: string;              // 显示名
+  path?: string;             // 完整路径，'system' 项为空
+  isDefault?: boolean;       // 是否系统默认
 }
 ```
 
-**特殊项**：列表第一项始终为 `{ id: 'system', displayName: '系统默认浏览器（推荐）', executablePath: '', isDefault: true }`，选择它时用 `shell.openExternal(url)`。
+**特殊项**：列表第一项始终为 `{ id: 'system', name: '系统默认浏览器（推荐）', isDefault: true }`，选择它时用 `shell.openExternal(url)`。
 
 **打开命令**：
 - `id === 'system'` → `shell.openExternal(url)`
-- 其他 → `child_process.spawn(executablePath, [url], { detached: true })`
+- 其他 → `child_process.spawn(path, [url], { detached: true })`
 - EXE 路径已失效 → 日志 WARN + 回退到系统默认 + 托盘气泡 "[浏览器名] 已卸载，已回退到系统默认浏览器"
 
-### 7.3 Favicon 获取（`FaviconService`）
+### 7.2 Favicon 获取（`FaviconService`）
 
 **优先级**（`getFavicon(url): Promise<Buffer>`）：
 1. 用户手动上传的图标（存在则直接返回）
@@ -1079,7 +1062,7 @@ interface BrowserInfo {
 
 **实现**：使用 Electron `net` 模块发起请求，`sharp` 做图片处理（⚠️ sharp 需要预编译二进制，在 `package.json` 的 `build.asarUnpack` 中包含）。
 
-### 7.4 开机自启（`AutoLaunchService`）
+### 7.3 开机自启（`AutoLaunchService`）
 封装 `auto-launch`：
 ```typescript
 const autoLauncher = new AutoLaunch({
@@ -1121,13 +1104,13 @@ sidebar-plus/
 │   │   ├── windows/
 │   │   │   ├── DockWindow.ts
 │   │   │   ├── PanelWindow.ts
+│   │   │   ├── PanelAnimationWindow.ts # 可选辅助窗口
+│   │   │   ├── PanelMenuWindow.ts      # 可选辅助窗口
 │   │   │   └── WindowManager.ts
-│   │   ├── appbar/
-│   │   │   └── AppBar.ts               # Win32 SHAppBarMessage 封装
 │   │   ├── panels/
 │   │   │   ├── PanelManager.ts         # 面板调度中枢
 │   │   │   ├── WebPanelHost.ts         # 管理 WebContentsView 生命周期
-│   │   │   └── BuiltinPanelHost.ts
+│   │   │   └── BuiltinPanelHost.ts     # 可选，若内置面板逻辑需要进一步拆分
 │   │   ├── store/
 │   │   │   ├── ConfigStore.ts
 │   │   │   └── migrations/
@@ -1174,7 +1157,7 @@ sidebar-plus/
 │   │   │       ├── useHoverIntent.ts
 │   │   │       └── useDragReorder.ts
 │   │   │
-│   │   ├── panel-chrome/                # 面板标题栏 UI
+│   │   ├── panel-chrome/                # 面板标题栏 UI + 内置面板渲染
 │   │   │   ├── index.html
 │   │   │   ├── main.tsx
 │   │   │   ├── App.tsx
@@ -1184,26 +1167,15 @@ sidebar-plus/
 │   │   │   │   ├── TitleBarMenu.tsx     # [⋮] 弹出菜单
 │   │   │   │   └── ResizeHandle.tsx     # 固定模式下的拖拽条
 │   │   │
-│   │   ├── add-site/                    # 添加网页内置面板
+│   │   ├── panel-menu/                  # 标题栏三点菜单独立窗口
 │   │   │   ├── index.html
 │   │   │   ├── main.tsx
-│   │   │   ├── App.tsx
-│   │   │   └── components/
-│   │   │       ├── UrlInput.tsx
-│   │   │       ├── IconPreview.tsx
-│   │   │       └── BrowserPicker.tsx
+│   │   │   └── App.tsx
 │   │   │
-│   │   ├── settings/                    # 设置内置面板
+│   │   ├── panel-animation/             # 动画快照层独立窗口
 │   │   │   ├── index.html
 │   │   │   ├── main.tsx
-│   │   │   ├── App.tsx
-│   │   │   └── components/
-│   │   │       ├── SettingsNav.tsx
-│   │   │       ├── GeneralSection.tsx
-│   │   │       ├── AppearanceSection.tsx
-│   │   │       ├── BehaviorSection.tsx
-│   │   │       ├── DataSection.tsx
-│   │   │       └── AboutSection.tsx
+│   │   │   └── App.tsx
 │   │   │
 │   │   └── shared/                      # 渲染层共享
 │   │       ├── styles/
@@ -1252,7 +1224,6 @@ sidebar-plus/
   "dependencies": {
     "auto-launch": "^5.0.6",
     "electron-log": "^5.2.0",
-    "koffi": "^2.8.0",
     "nanoid": "^5.0.0",
     "sharp": "^0.33.0",
     "zustand": "^5.0.0"
@@ -1310,7 +1281,6 @@ files:
 asarUnpack:
   - '**/node_modules/sharp/**'
   - '**/node_modules/@img/**'
-  - '**/node_modules/koffi/**'
 win:
   target:
     - target: nsis
@@ -1382,12 +1352,11 @@ nsis:
 - 溢出滚轮滚动
 - **验收**：能添加、管理、重排站点
 
-### M6 — 固定模式（AppBar）（3）
-- koffi 引入，AppBar.ts 封装
+### M6 — 固定模式（Pinned Surface）（2）
 - 📌 按钮切换固定态
-- AppBar 注册/释放
 - 边缘拖拽改宽度
-- **验收**：固定后挤压桌面工作区，拖拽改宽度成功
+- 固定态切站点 / 打开内置面板
+- **验收**：固定后面板常驻可见，切换图标不退出固定态，拖拽改宽度成功
 
 ### M7 — 系统集成（2）
 - 开机自启（含 --autostart 参数）
@@ -1429,8 +1398,9 @@ nsis:
 - [ ] 溢出时鼠标滚轮滚动
 - [ ] 右键图标 → 从边栏取消固定
 - [ ] 标题栏所有 5 个按钮按规格工作
-- [ ] 三点菜单 6 个项按规格工作
-- [ ] 固定模式下挤压桌面（最大化其他窗口避让）
+- [ ] 三点菜单 7 个项按规格工作
+- [ ] 固定模式下常驻展示且不自动收起
+- [ ] 固定模式下切换图标不退出固定态
 - [ ] 固定模式下边缘拖拽改宽度
 - [ ] 链接打开规则正确（内部导航 vs 外部浏览器）
 - [ ] 下载跳转到系统默认下载目录
@@ -1467,9 +1437,8 @@ nsis:
 
 | 风险 | 缓解 |
 |---|---|
-| koffi 与 Electron 主版本升级兼容性 | package.json 锁定大版本，升级前验证 |
 | sharp 预编译二进制体积 | `asarUnpack` 配置 + 首次启动后台预热 |
-| AppBar 与任务栏交互边界情况（多屏/隐藏任务栏） | M6 阶段专项测试，失败时回退到"悬浮置顶"模式并提示用户 |
+| 固定模式与贴边/多屏切换的几何同步 | M6 阶段专项测试；所有宽度提交只在 mouseup 落地，切边前先退出固定 |
 | 页面内 iframe 弹窗 | `setWindowOpenHandler` 已覆盖绝大多数场景，个别站点可能行为异常，v1 观察 |
 | 未签名安装器触发 SmartScreen | README 提供"更多信息 → 仍要运行"引导截图 |
 | 某些站点检测 iframe/WebView 拒绝访问 | `BrowserWindow.webPreferences.webviewTag = false`，统一用 WebContentsView；UA 保持真实 Chrome 样式 |
@@ -1519,26 +1488,25 @@ v1 仅手动检查更新。v2 可接入 `electron-updater` + 购买代码签名�
 **执行原则**：
 1. **严格按 M1→M9 顺序**推进，每完成一个里程碑运行验收 checklist
 2. **新增第三方库时**优先使用本 PRD 第 9 节列出的；不在列表中的须先写明原因
-3. **不得跨阶段合并代码**（例如在 M2 阶段提前写 AppBar 相关代码）
+3. **不得跨阶段合并代码**（例如在 M2 阶段提前写固定模式相关代码）
 4. **每个模块先写类型（shared/types.ts + shared/ipc-contracts.ts）再写实现**
 5. **IPC handler 必须包一层 try/catch**，错误返回结构化对象 `{ ok: false, error: string }`
-6. **主进程所有文件 I/O 走 async，Config 写入必须原子化**（temp + rename）
+6. **主进程所有文件 I/O 走 async，Config 写入必须采用 Windows 兼容的安全替换流程**（temp + replace/rename，不得出现先删主文件再留下空窗期）
 7. **渲染进程不直接操作 fs**，一律经 IPC
 8. **遇到与 PRD 不符的需求或歧义**，立即停止并向产品负责人确认，不自行决策
 
 **🚫 动画与窗口管理硬性规定（违反将导致"乱跳"、返工成本极高，Codex 必须严格遵守）**：
 
 9. **禁止用 `BrowserWindow.setBounds` 做动画**。滑入/滑出/宽度过渡一律用 CSS `transform` / `width` 完成。`setBounds` 每次动画生命周期内调用次数 ≤ 2（入口各一次）。
-10. **禁止在 mousemove / RAF 循环中调用 `SHAppBarMessage`**。拖拽改宽度时，mousemove 只改 CSS；`SHAppBarMessage(ABM_SETPOS)` 和 `BrowserWindow.setBounds` 只在 mouseup 时各调用一次。违反此条会让桌面上所有最大化窗口疯狂避让。
-11. **Dock 窗口和 Panel 窗口必须是两个独立的 `BrowserWindow`，不得合并**。Dock 一旦定位后，整个应用生命周期不再调用 `setBounds`（例外仅三个：切换贴边方向 / DPI 变化 / 屏幕分辨率变化）。
+10. **禁止在 mousemove / RAF 循环中提交原生窗口几何更新**。拖拽改宽度时，mousemove 只改 CSS；`BrowserWindow.setBounds` 和 `WebContentsView.setBounds` 只在 mouseup 时提交。
+11. **Dock 窗口和 Panel 窗口必须保持独立**。允许存在 `PanelAnimationWindow`、`PanelMenuWindow` 等辅助窗口，但不得让它们承担核心交互职责。Dock 一旦定位后，整个应用生命周期不再频繁调用 `setBounds`（例外仅限切换贴边方向 / DPI 变化 / 屏幕分辨率变化 / 固定模式宽度提交）。
 12. **WebContentsView 不参与 CSS 动画**。动画期间它通过 `setBounds({x:0,y:0,width:0,height:0})` "隐藏"，动画结束后一次性 `setBounds` 到最终位置。绝不能让它留在原位跟着窗口动画走。
 13. **必须精读 §5.14**。M3、M4、M6 阶段开工前完整阅读该章节并按其中的代码模板实现。该章节的 8 个反模式清单是底线，任何违反需要书面理由并由产品负责人批准。
 
 **关键提示**：
-- AppBar 实现前务必阅读微软官方文档：`https://learn.microsoft.com/en-us/windows/win32/api/shellapi/nf-shellapi-shappbarmessage`
 - WebContentsView（Electron 30+ 新 API）替代旧的 BrowserView，注意使用 `contentView.addChildView()`
-- `BrowserWindow.getNativeWindowHandle()` 返回 Buffer，HWND 在 Windows x64 上是前 8 字节的 `readBigUInt64LE(0)`，传给 koffi 时转 `uintptr_t`
-- **调试窗口抖动**：在 `BrowserWindow.on('move'|'resize')` 和 `AppBar.update()` 里打印日志；正常拖拽一次 resize 对应 1 条日志，若每秒 > 5 条必定是错误的循环调用
+- 标题栏菜单如出现层级问题，优先使用独立顶层菜单窗口，而不是强行下移或把菜单塞进 WebContentsView 层级里
+- **调试窗口抖动**：在 `BrowserWindow.on('move'|'resize')` 里打印日志；正常拖拽一次 resize 只应在提交时出现 1 条有效变更日志，若每秒 > 5 条必定是错误的循环调用
 
 ---
 

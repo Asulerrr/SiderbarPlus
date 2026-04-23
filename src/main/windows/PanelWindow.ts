@@ -1,8 +1,8 @@
 import { BrowserWindow } from 'electron';
 import { join } from 'node:path';
-import { DOCK_WIDTH } from '../../shared/constants';
 import type { AppConfig } from '../../shared/types';
 import { getDockBounds } from '../utils/display';
+import { getPanelBounds } from '../utils/panelBounds';
 
 export class PanelWindow {
   private window: BrowserWindow | null = null;
@@ -11,16 +11,14 @@ export class PanelWindow {
 
   create(): BrowserWindow {
     const dockBounds = getDockBounds(this.config.layout.edge);
-    const x =
-      this.config.layout.edge === 'right'
-        ? dockBounds.x - this.config.layout.panelDefaultWidth
-        : dockBounds.x + DOCK_WIDTH;
+    const panelBounds = getPanelBounds(
+      this.config.layout.edge,
+      dockBounds,
+      this.config.layout.panelDefaultWidth
+    );
 
     this.window = new BrowserWindow({
-      x,
-      y: dockBounds.y,
-      width: this.config.layout.panelDefaultWidth,
-      height: dockBounds.height,
+      ...panelBounds,
       minWidth: this.config.layout.panelDefaultWidth,
       minHeight: 480,
       frame: false,
@@ -73,5 +71,14 @@ export class PanelWindow {
 
   getContentBounds(): Electron.Rectangle | null {
     return this.window?.getContentBounds() ?? null;
+  }
+
+  updateBounds(edge: AppConfig['layout']['edge'], panelWidth: number): void {
+    if (!this.window) {
+      return;
+    }
+
+    const dockBounds = getDockBounds(edge);
+    this.window.setBounds(getPanelBounds(edge, dockBounds, panelWidth));
   }
 }

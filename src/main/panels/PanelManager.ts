@@ -9,6 +9,7 @@ import type { PanelAnimationWindow } from '../windows/PanelAnimationWindow';
 import type { PanelMenuWindow } from '../windows/PanelMenuWindow';
 import type { PanelWindow } from '../windows/PanelWindow';
 import { getDockBounds } from '../utils/display';
+import { getPreferredPanelWidth } from '../utils/panelBounds';
 import { WebPanelHost } from './WebPanelHost';
 
 const CHROME_HEIGHT = 76;
@@ -33,6 +34,8 @@ type PanelLifecycleState = 'closed' | 'opening' | 'open' | 'closing';
 
 export class PanelManager {
   private readonly webPanelHost: WebPanelHost;
+  private readonly panelWindow: PanelWindow;
+  private readonly animationWindow: PanelAnimationWindow;
   private readonly panelWindowRef: BrowserWindow;
   private readonly animationWindowRef: BrowserWindow;
   private currentPanelId: string | null = null;
@@ -56,6 +59,8 @@ export class PanelManager {
     private readonly menuWindow: PanelMenuWindow,
     private readonly emitPanelState: (state: PanelState) => void
   ) {
+    this.panelWindow = panelWindow;
+    this.animationWindow = animationWindow;
     const browserWindow = panelWindow.getBrowserWindow();
     const animationBrowserWindow = animationWindow.getBrowserWindow();
     if (!browserWindow) {
@@ -104,6 +109,7 @@ export class PanelManager {
         this.resetAnimationWindow();
       }
 
+      this.applyPanelBounds(descriptor, config);
       await this.switchPanel(descriptor, config.layout.edge);
       this.emitState(config.layout.edge, config.layout.pinned);
       return;
@@ -118,6 +124,7 @@ export class PanelManager {
     const token = ++this.lifecycleToken;
     this.currentPanelId = panelId;
     this.pendingDestroyId = null;
+    this.applyPanelBounds(descriptor, config);
     this.raisePanelWindows();
     this.panelWindowRef.setIgnoreMouseEvents(false);
 
@@ -370,6 +377,16 @@ export class PanelManager {
     this.hoverCloseDelayMs = config.behavior.hoverCloseDelayMs;
   }
 
+  private applyPanelBounds(descriptor: PanelDescriptor, config: AppConfig): void {
+    const panelWidth = getPreferredPanelWidth(
+      descriptor.preferredWidth,
+      config.layout.panelDefaultWidth
+    );
+
+    this.panelWindow.updateBounds(config.layout.edge, panelWidth);
+    this.animationWindow.updateBounds(config.layout.edge, panelWidth);
+  }
+
   private startPointerTracking(): void {
     if (this.pointerTracker) {
       return;
@@ -533,6 +550,10 @@ export class PanelManager {
 
   private resetAnimationWindow(): void {
     this.animationWindowRef.webContents.send(IPC_CHANNELS.panelAnimationReset);
+  }
+
+  private hideAnimationWindow(): void {
+    this.animationWindow.hide();
   }
 
   private raisePanelWindows(): void {

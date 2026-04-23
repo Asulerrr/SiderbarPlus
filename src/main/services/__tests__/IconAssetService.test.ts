@@ -34,7 +34,7 @@ test('hydrates local icon paths into renderer-safe data URLs', async (t) => {
       web: {
         url: 'https://example.com',
         openInBrowser: 'system',
-        zoomLevel: 1,
+        zoomFactor: 1,
         userAgentMode: 'desktop',
         notificationsSnoozed: false
       }
@@ -62,7 +62,7 @@ test('leaves remote icon paths unchanged', async () => {
       web: {
         url: 'https://example.com',
         openInBrowser: 'system',
-        zoomLevel: 1,
+        zoomFactor: 1,
         userAgentMode: 'desktop',
         notificationsSnoozed: false
       }
@@ -90,7 +90,7 @@ test('falls back to original icon source when local file is missing', async () =
       web: {
         url: 'https://example.com',
         openInBrowser: 'system',
-        zoomLevel: 1,
+        zoomFactor: 1,
         userAgentMode: 'desktop',
         notificationsSnoozed: false
       }

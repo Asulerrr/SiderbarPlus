@@ -451,7 +451,7 @@ export default function App(): JSX.Element {
             web: {
               url: normalizedUrl,
               openInBrowser: selectedBrowserId,
-              zoomLevel: 1,
+              zoomFactor: 1,
               userAgentMode: 'desktop',
               notificationsSnoozed: false
             }

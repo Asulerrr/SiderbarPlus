@@ -5,7 +5,7 @@ export type PanelType = 'web' | 'builtin';
 export interface WebPanelConfig {
   url: string;
   openInBrowser: string;
-  zoomLevel: number;
+  zoomFactor: number;
   userAgentMode: 'desktop' | 'mobile';
   notificationsSnoozed?: boolean;
 }

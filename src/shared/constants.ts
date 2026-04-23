@@ -85,7 +85,7 @@ const buildDevTestPanels = () =>
     web: {
       url: panel.url,
       openInBrowser: 'system',
-      zoomLevel: 1,
+      zoomFactor: 1,
       userAgentMode: 'desktop' as const,
       notificationsSnoozed: false
     }

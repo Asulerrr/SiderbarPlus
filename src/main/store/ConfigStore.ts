@@ -1,8 +1,9 @@
-import { mkdir, readFile, rename, rm, stat, writeFile, copyFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, stat, writeFile, copyFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { DEFAULT_CONFIG } from '../../shared/constants';
 import type { AppConfig } from '../../shared/types';
 import { logger } from '../utils/logger';
+import { buildConfigPersistPlan } from '../utils/configPersistStrategy';
 import { getConfigBackupPath, getConfigPath, getTempConfigPath } from '../utils/paths';
 import { migrateConfig } from './migrations';
 
@@ -81,14 +82,15 @@ export class ConfigStore {
   }
 
   private async persist(config: AppConfig): Promise<void> {
-    const configPath = getConfigPath();
-    const backupPath = getConfigBackupPath();
-    const tempPath = getTempConfigPath();
+    const persistPlan = buildConfigPersistPlan({
+      configPath: getConfigPath(),
+      backupPath: getConfigBackupPath(),
+      tempPath: getTempConfigPath()
+    });
 
-    await mkdir(dirname(configPath), { recursive: true });
-    await writeFile(tempPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
-    await rm(configPath, { force: true });
-    await rename(tempPath, configPath);
-    await copyFile(configPath, backupPath);
+    await mkdir(dirname(persistPlan.replaceTarget), { recursive: true });
+    await writeFile(persistPlan.writeTempTo, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+    await rename(persistPlan.writeTempTo, persistPlan.replaceTarget);
+    await copyFile(persistPlan.copyBackupFrom, persistPlan.copyBackupTo);
   }
 }
