@@ -65,7 +65,8 @@ export const IPC_CHANNELS = {
   chromeFadeIn: 'chrome:fade-in',
   panelNavigationState: 'panel:navigation-state',
   panelTogglePin: 'panel:toggle-pin',
-  panelCommitResize: 'panel:commit-resize'
+  panelCommitResize: 'panel:commit-resize',
+  panelResizeDrag: 'panel:resize-drag'
 } as const;
 
 export interface DockAPI {
@@ -117,6 +118,7 @@ export interface PanelAPI {
   onPanelState: (callback: (state: PanelState) => void) => () => void;
   togglePin: () => Promise<IpcResult<void>>;
   commitResize: (width: number) => Promise<IpcResult<void>>;
+  resizeDrag: (width: number) => void;
 }
 
 export interface BuiltinAPI {

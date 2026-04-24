@@ -20,6 +20,7 @@ import type {
   PanelNavigationPayload,
   SiteInfo
 } from '@shared/types';
+import { ResizeHandle } from './components/ResizeHandle';
 
 const CONTENT_INSET = 8;
 const PANEL_TOP_INSET = 8;
@@ -520,6 +521,9 @@ export default function App(): JSX.Element {
             bottom: CONTENT_INSET
           }}
         >
+          {chromeState.panelMode === 'pinned' ? (
+            <ResizeHandle edge={chromeState.edge} />
+          ) : null}
           <div
             className={`flex h-[76px] shrink-0 items-center justify-between bg-[#202020] px-4 transition-opacity duration-100 ${
               fading ? 'opacity-0' : 'opacity-100'

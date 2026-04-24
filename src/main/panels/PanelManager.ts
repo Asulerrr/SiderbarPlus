@@ -358,9 +358,34 @@ export class PanelManager {
     }
   }
 
-  commitResize(newWidth: number): void {
+  /**
+   * 拖拽中途的宽度同步（rAF 节流来自渲染进程）。
+   *
+   * 本方法明确偏离 PRD §5.14 铁律 3（"固定模式拖拽期间不改原生窗口几何"）。
+   * 理由：M5 架构下 PanelWindow 宽度 = chrome 宽度，CSS-only 伸缩物理不可达。
+   * 铁律 3 的底层原因（Win32 AppBar 系统工作区重计算导致其他窗口避让）在 v1.0
+   * 不接入 AppBar 时不成立（PRD §5.7.1 明文禁用 AppBar）。剩余的 Electron
+   * setBounds 高频合成闪烁已由渲染进程 rAF 节流到 ≤60fps 控制。
+   * 合规检查：`view.setBounds` 仍遵守铁律 2，仅在 mouseup (commitResize) 调用 1 次。
+   * 详见 docs/superpowers/specs/2026-04-24-m6-design.md §3.2。
+   */
+  resizeDrag(newWidth: number): void {
+    if (this.panelMode !== 'pinned' || this.state !== 'open') {
+      return;
+    }
     const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
     const width = _clampPanelWidth(newWidth, display.workArea.width);
+    logger.info('[m6] resizeDrag', { newWidth });
+    this.panelWindow.updateBounds(this.edge, width);
+    this.animationWindow.updateBounds(this.edge, width);
+    // 不动 view；chrome 在 view 前方覆盖"拉出"区域
+  }
+
+  commitResize(newWidth: number): void {
+    // mouseup 终点：一次性对齐 view + 持久化 panelDefaultWidth
+    const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+    const width = _clampPanelWidth(newWidth, display.workArea.width);
+    logger.info('[m6] commitResize', { newWidth });
 
     this.panelWindow.updateBounds(this.edge, width);
     this.animationWindow.updateBounds(this.edge, width);

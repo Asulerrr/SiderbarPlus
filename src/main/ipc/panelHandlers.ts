@@ -603,4 +603,9 @@ export const registerPanelHandlers = (
       }
     }
   );
+
+  ipcMain.on(IPC_CHANNELS.panelResizeDrag, (_event, width: number) => {
+    if (typeof width !== 'number' || !Number.isFinite(width)) return;
+    windowManager.resizeDragPanel(width);
+  });
 };

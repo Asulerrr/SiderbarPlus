@@ -161,4 +161,8 @@ export class WindowManager {
   commitPanelResize(width: number): void {
     this.panelManager?.commitResize(width);
   }
+
+  resizeDragPanel(width: number): void {
+    this.panelManager?.resizeDrag(width);
+  }
 }

@@ -72,7 +72,10 @@ const panelAPI: PanelAPI = {
     return () => ipcRenderer.removeListener(IPC_CHANNELS.panelState, listener);
   },
   togglePin: () => ipcRenderer.invoke(IPC_CHANNELS.panelTogglePin),
-  commitResize: (width) => ipcRenderer.invoke(IPC_CHANNELS.panelCommitResize, width)
+  commitResize: (width) => ipcRenderer.invoke(IPC_CHANNELS.panelCommitResize, width),
+  resizeDrag: (width) => {
+    ipcRenderer.send(IPC_CHANNELS.panelResizeDrag, width);
+  }
 };
 
 contextBridge.exposeInMainWorld('panelAPI', panelAPI);
