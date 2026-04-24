@@ -3,6 +3,7 @@ import {
   ExternalLink,
   Minus,
   MoreHorizontal,
+  Pin,
   PinOff,
   X
 } from 'lucide-react';
@@ -32,6 +33,7 @@ interface ChromeState {
   panelType: 'web' | 'builtin';
   builtinWidgetId: string | null;
   builtinTargetPanelId: string | null;
+  panelMode: 'hover' | 'pinned';
 }
 
 const normalizeUrl = (value: string): string => {
@@ -113,7 +115,8 @@ export default function App(): JSX.Element {
     edge: 'right',
     panelType: 'web',
     builtinWidgetId: null,
-    builtinTargetPanelId: null
+    builtinTargetPanelId: null,
+    panelMode: 'hover'
   });
   const [fading, setFading] = useState(false);
   const [contentSnapshotDataUrl, setContentSnapshotDataUrl] = useState<string | null>(null);
@@ -233,15 +236,14 @@ export default function App(): JSX.Element {
 
   const applyPayload = async (payload: PanelAnimatePayload | PanelChromePayload): Promise<void> => {
     const token = ++hydrationTokenRef.current;
-    const fallbackState = buildChromeState(payload.descriptor, payload.edge, payload.url, config);
-    setChromeState(fallbackState);
+    setChromeState((prev) => ({ ...buildChromeState(payload.descriptor, payload.edge, payload.url, config), panelMode: prev.panelMode }));
 
     const nextConfig = await loadConfig();
     if (token !== hydrationTokenRef.current) {
       return;
     }
 
-    setChromeState(buildChromeState(payload.descriptor, payload.edge, payload.url, nextConfig));
+    setChromeState((prev) => ({ ...buildChromeState(payload.descriptor, payload.edge, payload.url, nextConfig), panelMode: prev.panelMode }));
     await hydrateBuiltinPanel(payload.descriptor, nextConfig, token);
   };
 
@@ -295,6 +297,12 @@ export default function App(): JSX.Element {
       );
     });
 
+    const disposePanelState = window.panelAPI.onPanelState((state) => {
+      setChromeState((prev) =>
+        prev.panelMode === state.panelMode ? prev : { ...prev, panelMode: state.panelMode }
+      );
+    });
+
     return () => {
       mounted = false;
       disposePrepareClose();
@@ -303,6 +311,7 @@ export default function App(): JSX.Element {
       disposeFadeOut();
       disposeFadeIn();
       disposeNavigation();
+      disposePanelState();
     };
   }, []);
 
@@ -576,8 +585,10 @@ export default function App(): JSX.Element {
               <button
                 type="button"
                 className="flex h-8 w-8 items-center justify-center rounded text-white/72 hover:bg-white/8"
+                title={chromeState.panelMode === 'pinned' ? '取消固定侧窗格' : '固定侧窗格'}
+                onClick={() => void window.panelAPI.togglePin()}
               >
-                <PinOff size={14} />
+                {chromeState.panelMode === 'pinned' ? <Pin size={14} /> : <PinOff size={14} />}
               </button>
               <button
                 type="button"

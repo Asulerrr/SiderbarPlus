@@ -114,6 +114,7 @@ export interface PanelAPI {
   onChromeFadeOut: (callback: () => void) => () => void;
   onChromeFadeIn: (callback: (payload: PanelChromePayload) => void) => () => void;
   onNavigationState: (callback: (payload: PanelNavigationPayload) => void) => () => void;
+  onPanelState: (callback: (state: PanelState) => void) => () => void;
   togglePin: () => Promise<IpcResult<void>>;
   commitResize: (width: number) => Promise<IpcResult<void>>;
 }
