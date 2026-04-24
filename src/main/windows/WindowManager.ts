@@ -158,8 +158,8 @@ export class WindowManager {
     await this.panelManager?.togglePin();
   }
 
-  commitPanelResize(width: number): void {
-    this.panelManager?.commitResize(width);
+  async commitPanelResize(width: number): Promise<void> {
+    await this.panelManager?.commitResize(width);
   }
 
   resizeDragPanel(width: number): void {

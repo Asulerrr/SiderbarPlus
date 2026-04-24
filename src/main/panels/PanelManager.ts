@@ -375,30 +375,68 @@ export class PanelManager {
     }
     const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
     const width = _clampPanelWidth(newWidth, display.workArea.width);
-    logger.info('[m6] resizeDrag', { newWidth });
+    logger.info('[m6] resize clamp', {
+      phase: 'drag',
+      newWidth,
+      workAreaWidth: display.workArea.width,
+      clamped: width
+    });
     this.panelWindow.updateBounds(this.edge, width);
-    this.animationWindow.updateBounds(this.edge, width);
+    // Bug 13: 拖拽期间不动 animationWindow，避免双 transparent 窗口同帧 setBounds 频闪
     // 不动 view；chrome 在 view 前方覆盖"拉出"区域
   }
 
-  commitResize(newWidth: number): void {
+  async commitResize(newWidth: number): Promise<void> {
     // mouseup 终点：一次性对齐 view + 持久化 panelDefaultWidth
     const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
     const width = _clampPanelWidth(newWidth, display.workArea.width);
-    logger.info('[m6] commitResize', { newWidth });
+    logger.info('[m6] resize clamp', {
+      phase: 'commit',
+      newWidth,
+      workAreaWidth: display.workArea.width,
+      clamped: width
+    });
 
     this.panelWindow.updateBounds(this.edge, width);
+    // animationWindow 在 commit 保留同步，保证下次 open/close 动画 bounds 正确
     this.animationWindow.updateBounds(this.edge, width);
 
     const view = this.currentPanelId
       ? this.webPanelHost.getView(this.currentPanelId)
       : null;
     if (view) {
-      const [w, h] = this.panelWindowRef.getContentSize();
-      view.setBounds({ x: 0, y: CHROME_HEIGHT, width: w, height: h - CHROME_HEIGHT });
+      // Bug 11: 复用 updateViewBounds 计算正确 inset/border，而非简化算法
+      this.updateViewBounds(view, this.edge);
     }
 
-    void this.configStore.update({ layout: { panelDefaultWidth: width } });
+    // Bug 14: 当前 panel 是用户自定义 panel 时，同时写入 per-panel preferredWidth，
+    // 否则 applyPanelBounds 永远读取 descriptor.preferredWidth 初值，panelDefaultWidth 不起作用。
+    // builtin descriptor（add-site / edit-site / site-info）不持久化 preferredWidth。
+    const config = await this.configStore.read();
+    const builtinRoute = this.currentPanelId ? parseBuiltinPanelId(this.currentPanelId) : null;
+    const isBuiltin = builtinRoute !== null;
+    const matchesUserPanel =
+      !isBuiltin &&
+      this.currentPanelId != null &&
+      config.panels.some((p) => p.id === this.currentPanelId);
+
+    if (matchesUserPanel) {
+      const nextPanels = config.panels.map((p) =>
+        p.id === this.currentPanelId ? { ...p, preferredWidth: width } : p
+      );
+      await this.configStore.update({
+        panels: nextPanels,
+        layout: { panelDefaultWidth: width }
+      });
+    } else {
+      await this.configStore.update({ layout: { panelDefaultWidth: width } });
+    }
+    logger.info('[m6] commitResize persisted', {
+      panelId: this.currentPanelId,
+      width,
+      isBuiltin,
+      matchesUserPanel
+    });
   }
 
   private async switchPanel(descriptor: PanelDescriptor, edge: Edge): Promise<void> {

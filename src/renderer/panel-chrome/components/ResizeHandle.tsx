@@ -8,7 +8,8 @@ interface Props {
 const MIN_WIDTH = 320;
 
 const clampToScreen = (width: number): number => {
-  const max = Math.floor(window.screen.availWidth * 0.5);
+  // Bug 12: 取 availWidth / width 的较小值兜底，防止 DPI / 多屏边界返回异常大值导致上限失效
+  const max = Math.floor(Math.min(window.screen.availWidth, window.screen.width) * 0.5);
   return Math.min(Math.max(Math.round(width), MIN_WIDTH), max);
 };
 

@@ -592,7 +592,7 @@ export const registerPanelHandlers = (
     IPC_CHANNELS.panelCommitResize,
     async (_event, width: number): Promise<IpcResult<void>> => {
       try {
-        windowManager.commitPanelResize(width);
+        await windowManager.commitPanelResize(width);
         return { ok: true, data: undefined };
       } catch (error) {
         logger.error('panel:commit-resize failed', error);
