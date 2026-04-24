@@ -44,7 +44,6 @@ export interface AppConfig {
   layout: {
     edge: Edge;
     panelDefaultWidth: number;
-    pinned: boolean;
   };
   behavior: {
     hoverOpenDelayMs: number;

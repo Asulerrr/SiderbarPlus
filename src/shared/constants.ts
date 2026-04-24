@@ -104,8 +104,7 @@ export const DEFAULT_CONFIG = (): AppConfig => {
     },
     layout: {
       edge: 'right',
-      panelDefaultWidth: PANEL_DEFAULT_WIDTH,
-      pinned: false
+      panelDefaultWidth: PANEL_DEFAULT_WIDTH
     },
     behavior: {
       hoverOpenDelayMs: 200,
