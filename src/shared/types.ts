@@ -60,7 +60,7 @@ export interface AppConfig {
 export interface PanelState {
   activePanelId: string | null;
   panelVisible: boolean;
-  pinned: boolean;
+  panelMode: 'hover' | 'pinned';
   edge: Edge;
 }
 

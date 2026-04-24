@@ -12,6 +12,9 @@ import { getDockBounds } from '../utils/display';
 import { getPreferredPanelWidth } from '../utils/panelBounds';
 import { WebPanelHost } from './WebPanelHost';
 
+export { clampPanelWidth } from './panelResize.ts';
+import { clampPanelWidth as _clampPanelWidth } from './panelResize.ts';
+
 const CHROME_HEIGHT = 76;
 const OPEN_ANIMATION_MS = 170;
 const CLOSE_ANIMATION_MS = 170;
@@ -46,7 +49,7 @@ export class PanelManager {
   private lifecycleToken = 0;
   private switchToken = 0;
   private sticky = false;
-  private pinned = false;
+  private panelMode: 'hover' | 'pinned' = 'hover';
   private edge: Edge = 'right';
   private hoverCloseDelayMs = 300;
   private pendingDestroyId: string | null = null;
@@ -111,12 +114,12 @@ export class PanelManager {
 
       this.applyPanelBounds(descriptor, config);
       await this.switchPanel(descriptor, config.layout.edge);
-      this.emitState(config.layout.edge, config.layout.pinned);
+      this.emitState(config.layout.edge, this.panelMode);
       return;
     }
 
     if (this.currentPanelId === panelId && this.state === 'open') {
-      this.emitState(config.layout.edge, config.layout.pinned);
+      this.emitState(config.layout.edge, this.panelMode);
       return;
     }
 
@@ -148,7 +151,7 @@ export class PanelManager {
     this.resetAnimationWindow();
     this.cancelCloseTimer();
     this.state = 'open';
-    this.emitState(config.layout.edge, config.layout.pinned);
+    this.emitState(config.layout.edge, this.panelMode);
   }
 
   scheduleHide(destroy = false): void {
@@ -156,7 +159,7 @@ export class PanelManager {
     void this.configStore.read().then((config) => {
       void this.webPanelHost.refreshConfig();
       this.applyHoverConfig(config);
-      if (this.sticky || config.layout.pinned) {
+      if (this.sticky || this.panelMode === 'pinned') {
         return;
       }
 
@@ -181,7 +184,7 @@ export class PanelManager {
     this.state = 'closing';
     const token = ++this.lifecycleToken;
     this.pendingDestroyId = destroy ? this.currentPanelId : this.pendingDestroyId;
-    this.emitState(config.layout.edge, config.layout.pinned, false);
+    this.emitState(config.layout.edge, this.panelMode, false);
 
     const snapshotPanelId = this.currentPanelId;
     const currentView = this.webPanelHost.getView(this.currentPanelId);
@@ -238,7 +241,7 @@ export class PanelManager {
     this.state = 'closed';
     this.currentPanelId = null;
     this.sticky = false;
-    this.emitState(config.layout.edge, config.layout.pinned);
+    this.emitState(config.layout.edge, this.panelMode);
   }
 
   markSticky(): void {
@@ -341,10 +344,44 @@ export class PanelManager {
     this.snapshots.delete(panelId);
   }
 
+  async togglePin(): Promise<void> {
+    if (this.panelMode === 'hover') {
+      this.panelMode = 'pinned';
+      this.cancelCloseTimer();
+      this.emitState(this.edge, this.panelMode);
+      return;
+    }
+    this.panelMode = 'hover';
+    this.emitState(this.edge, this.panelMode);
+    if (this.state === 'open') {
+      await this.hidePanel(false);
+    }
+  }
+
+  commitResize(newWidth: number): void {
+    const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+    const width = _clampPanelWidth(newWidth, display.workArea.width);
+
+    this.panelWindow.updateBounds(this.edge, width);
+    this.animationWindow.updateBounds(this.edge, width);
+
+    const view = this.currentPanelId
+      ? this.webPanelHost.getView(this.currentPanelId)
+      : null;
+    if (view) {
+      const [w, h] = this.panelWindowRef.getContentSize();
+      view.setBounds({ x: 0, y: CHROME_HEIGHT, width: w, height: h - CHROME_HEIGHT });
+    }
+
+    void this.configStore.update({ layout: { panelDefaultWidth: width } });
+  }
+
   private async switchPanel(descriptor: PanelDescriptor, edge: Edge): Promise<void> {
     const token = ++this.switchToken;
     this.pendingDestroyId = null;
-    this.sticky = false;
+    if (this.panelMode === 'hover') {
+      this.sticky = false;
+    }
     this.closeMenu();
 
     this.panelWindowRef.webContents.send(IPC_CHANNELS.chromeFadeOut);
@@ -373,7 +410,6 @@ export class PanelManager {
 
   private applyHoverConfig(config: AppConfig): void {
     this.edge = config.layout.edge;
-    this.pinned = config.layout.pinned;
     this.hoverCloseDelayMs = config.behavior.hoverCloseDelayMs;
   }
 
@@ -413,7 +449,7 @@ export class PanelManager {
       return;
     }
 
-    if (this.sticky || this.pinned) {
+    if (this.sticky || this.panelMode === 'pinned') {
       this.pointerOutsideSince = null;
       return;
     }
@@ -577,11 +613,15 @@ export class PanelManager {
     }
   }
 
-  private emitState(edge: Edge, pinned: boolean, panelVisible = this.state === 'open'): void {
+  private emitState(
+    edge: Edge,
+    panelMode: 'hover' | 'pinned',
+    panelVisible = this.state === 'open'
+  ): void {
     this.emitPanelState({
       activePanelId: this.currentPanelId,
       panelVisible,
-      pinned,
+      panelMode,
       edge
     });
   }

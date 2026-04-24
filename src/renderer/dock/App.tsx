@@ -12,7 +12,7 @@ export default function App(): JSX.Element {
   const [panelState, setPanelState] = useState<PanelState>({
     activePanelId: null,
     panelVisible: false,
-    pinned: false,
+    panelMode: 'hover',
     edge: 'right'
   });
   const [menuOpen, setMenuOpen] = useState(false);
@@ -34,8 +34,7 @@ export default function App(): JSX.Element {
           setConfig(configResult.data);
           setPanelState((current) => ({
             ...current,
-            edge: configResult.data.layout.edge,
-            pinned: configResult.data.layout.pinned
+            edge: configResult.data.layout.edge
           }));
         }
 
