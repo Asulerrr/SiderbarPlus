@@ -178,7 +178,7 @@ export interface IconSource {
 | `app:toggle-dock-visibility` | R→M | `void` | `IpcResult<boolean>` |
 | `browsers:list` | R→M | `void` | `IpcResult<BrowserInfo[]>` |
 | `favicon:fetch` | R→M | `{ url }` | `IpcResult<FaviconFetchResult>` |
-| `panel:state` | M→R | (push) `{ activePanelId, panelVisible, pinned, edge }` | — |
+| `panel:state` | M→R | (push) `{ activePanelId, panelVisible, panelMode, edge }` | — |
 | `panels:updated` | M→R | (push) `PanelsUpdatedPayload` | — |
 | `panel:animate-in` | M→R | (push) `PanelAnimatePayload` | — |
 | `panel:animate-out` | M→R | (push) `void` | — |
@@ -216,7 +216,6 @@ export interface AppConfig {
   layout: {
     edge: 'left' | 'right';        // 默认 'right'
     panelDefaultWidth: number;     // 默认 456
-    pinned: boolean;               // 上次会话固定状态，默认 false
   };
   behavior: {
     hoverOpenDelayMs: number;      // 默认 200
@@ -236,7 +235,7 @@ export interface AppConfig {
 {
   "schemaVersion": 1,
   "app": { "autoLaunch": true, "autoShowDock": true, "hideOnFullscreen": true },
-  "layout": { "edge": "right", "panelDefaultWidth": 456, "pinned": false },
+  "layout": { "edge": "right", "panelDefaultWidth": 456 },
   "behavior": { "hoverOpenDelayMs": 200, "hoverCloseDelayMs": 300, "keepAudioOnHide": true },
   "panels": [],
   "meta": { "createdAt": "...", "lastUpdatedAt": "..." }
@@ -454,7 +453,7 @@ export interface AppConfig {
 - 面板切换为**固定展示态**：永久可见、悬停开关逻辑停用
 - v1.0 **不要求也不允许**通过 Win32 AppBar / `SHAppBarMessage` 挤压系统工作区
 - 固定态仍是普通置顶窗口，不改变其他应用的最大化区域
-- 调用固定模式切换逻辑，更新 `config.layout.pinned = true`
+- `panelMode` 为纯内存态，不持久化；每次应用启动默认回到 `hover`
 
 #### 5.7.2 固定态下的特殊行为
 - 面板**常驻**，不再自动关闭
@@ -476,7 +475,7 @@ export interface AppConfig {
 #### 5.7.4 取消固定
 - 点击标题栏 **📌** 按钮（变为 PinOff 图标）
 - 面板回到悬停模式（当前面板关闭动画收起）
-- `config.layout.pinned = false`
+- `panelMode` 内存态切回 `hover`（不写配置）
 
 ### 5.8 左右贴边切换
 
@@ -486,7 +485,7 @@ export interface AppConfig {
 不提供快捷键（v1 低频操作）。
 
 #### 5.8.2 切换过程
-1. 若当前为固定模式 → 先取消固定
+1. 若当前 `panelMode = pinned` → 先切回 `hover`（当前面板走收起动画）
 2. Dock 窗口 `hide()`
 3. 所有面板关闭
 4. 重新计算 Dock 位置（x 坐标从 `workArea.x + workArea.width - 44` 变为 `workArea.x`，或反之）
