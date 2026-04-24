@@ -153,4 +153,12 @@ export class WindowManager {
   destroyPanelView(panelId: string): void {
     this.panelManager?.destroyPanelView(panelId);
   }
+
+  async togglePanelPin(): Promise<void> {
+    await this.panelManager?.togglePin();
+  }
+
+  commitPanelResize(width: number): void {
+    this.panelManager?.commitResize(width);
+  }
 }

@@ -63,7 +63,9 @@ export const IPC_CHANNELS = {
   panelMenuHydrate: 'panel-menu:hydrate',
   chromeFadeOut: 'chrome:fade-out',
   chromeFadeIn: 'chrome:fade-in',
-  panelNavigationState: 'panel:navigation-state'
+  panelNavigationState: 'panel:navigation-state',
+  panelTogglePin: 'panel:toggle-pin',
+  panelCommitResize: 'panel:commit-resize'
 } as const;
 
 export interface DockAPI {
@@ -112,6 +114,8 @@ export interface PanelAPI {
   onChromeFadeOut: (callback: () => void) => () => void;
   onChromeFadeIn: (callback: (payload: PanelChromePayload) => void) => () => void;
   onNavigationState: (callback: (payload: PanelNavigationPayload) => void) => () => void;
+  togglePin: () => Promise<IpcResult<void>>;
+  commitResize: (width: number) => Promise<IpcResult<void>>;
 }
 
 export interface BuiltinAPI {

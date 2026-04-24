@@ -574,4 +574,33 @@ export const registerPanelHandlers = (
       }
     }
   );
+
+  ipcMain.handle(IPC_CHANNELS.panelTogglePin, async (): Promise<IpcResult<void>> => {
+    try {
+      await windowManager.togglePanelPin();
+      return { ok: true, data: undefined };
+    } catch (error) {
+      logger.error('panel:toggle-pin failed', error);
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : 'Unknown toggle pin error'
+      };
+    }
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.panelCommitResize,
+    async (_event, width: number): Promise<IpcResult<void>> => {
+      try {
+        windowManager.commitPanelResize(width);
+        return { ok: true, data: undefined };
+      } catch (error) {
+        logger.error('panel:commit-resize failed', error);
+        return {
+          ok: false,
+          error: error instanceof Error ? error.message : 'Unknown commit resize error'
+        };
+      }
+    }
+  );
 };
