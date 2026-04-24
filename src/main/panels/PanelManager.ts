@@ -53,6 +53,7 @@ export class PanelManager {
   private edge: Edge = 'right';
   private hoverCloseDelayMs = 300;
   private pendingDestroyId: string | null = null;
+  private lastResizeDragWidth: number | null = null;
   private readonly snapshots = new Map<string, string>();
 
   constructor(
@@ -94,6 +95,11 @@ export class PanelManager {
     const config = await this.configStore.read();
     await this.webPanelHost.refreshConfig();
     const descriptor = this.getDescriptor(config, panelId);
+    logger.info('[m6] showPanel read', {
+      panelId,
+      descriptorPreferredWidth: descriptor?.preferredWidth,
+      layoutPanelDefaultWidth: config.layout.panelDefaultWidth
+    });
     if (!descriptor) {
       return;
     }
@@ -347,11 +353,13 @@ export class PanelManager {
   async togglePin(): Promise<void> {
     if (this.panelMode === 'hover') {
       this.panelMode = 'pinned';
+      this.lastResizeDragWidth = null;
       this.cancelCloseTimer();
       this.emitState(this.edge, this.panelMode);
       return;
     }
     this.panelMode = 'hover';
+    this.lastResizeDragWidth = null;
     this.emitState(this.edge, this.panelMode);
     if (this.state === 'open') {
       await this.hidePanel(false);
@@ -373,7 +381,9 @@ export class PanelManager {
     if (this.panelMode !== 'pinned' || this.state !== 'open') {
       return;
     }
-    const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+    // Bug 2: clamp must use dock's display (primary), not cursor's display.
+    // 双屏下鼠标可能在副屏，但 dock 永远贴主屏，必须用主屏 workArea 约束宽度。
+    const display = screen.getPrimaryDisplay();
     const width = _clampPanelWidth(newWidth, display.workArea.width);
     logger.info('[m6] resize clamp', {
       phase: 'drag',
@@ -381,14 +391,22 @@ export class PanelManager {
       workAreaWidth: display.workArea.width,
       clamped: width
     });
+    // Bug 3: 宽度未变化时跳过 setBounds，避免 Windows 相同 bounds 仍重绘闪烁。
+    if (this.lastResizeDragWidth === width) {
+      return;
+    }
+    this.lastResizeDragWidth = width;
     this.panelWindow.updateBounds(this.edge, width);
     // Bug 13: 拖拽期间不动 animationWindow，避免双 transparent 窗口同帧 setBounds 频闪
     // 不动 view；chrome 在 view 前方覆盖"拉出"区域
   }
 
   async commitResize(newWidth: number): Promise<void> {
+    // Bug 3: 拖拽结束，重置去重缓存，下次拖拽干净起步。
+    this.lastResizeDragWidth = null;
     // mouseup 终点：一次性对齐 view + 持久化 panelDefaultWidth
-    const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+    // Bug 2: 同 resizeDrag，用 dock 所在屏（主屏）workArea。
+    const display = screen.getPrimaryDisplay();
     const width = _clampPanelWidth(newWidth, display.workArea.width);
     logger.info('[m6] resize clamp', {
       phase: 'commit',
@@ -406,7 +424,9 @@ export class PanelManager {
       : null;
     if (view) {
       // Bug 11: 复用 updateViewBounds 计算正确 inset/border，而非简化算法
-      this.updateViewBounds(view, this.edge);
+      // Bug 4: panelWindow.setBounds 后 getContentSize 可能返回旧值（Windows 原生消息时序），
+      // 显式传入 width 确保 view bounds 按新宽度计算，网页渲染同步放大。
+      this.updateViewBounds(view, this.edge, width);
     }
 
     // Bug 14: 当前 panel 是用户自定义 panel 时，同时写入 per-panel preferredWidth，
@@ -436,6 +456,16 @@ export class PanelManager {
       width,
       isBuiltin,
       matchesUserPanel
+    });
+    // Bug 4 诊断：回读校验，区分"写入失败"vs"读取时未取到最新"。
+    const verifyConfig = await this.configStore.read();
+    const verifyPanel = this.currentPanelId
+      ? verifyConfig.panels.find((p) => p.id === this.currentPanelId)
+      : null;
+    logger.info('[m6] commitResize verify', {
+      panelId: this.currentPanelId,
+      persistedPreferredWidth: verifyPanel?.preferredWidth,
+      persistedDefaultWidth: verifyConfig.layout.panelDefaultWidth
     });
   }
 
@@ -578,8 +608,13 @@ export class PanelManager {
     }
   }
 
-  private updateViewBounds(view: WebContentsView, edge: Edge): void {
-    const [width, height] = this.panelWindowRef.getContentSize();
+  private updateViewBounds(
+    view: WebContentsView,
+    edge: Edge,
+    overrideContentWidth?: number
+  ): void {
+    const [rawWidth, height] = this.panelWindowRef.getContentSize();
+    const width = overrideContentWidth != null ? overrideContentWidth : rawWidth;
     const sideInsetLeft = edge === 'right' ? CONTENT_INSET : 0;
     const sideInsetRight = edge === 'left' ? CONTENT_INSET : 0;
     const dockSideBorderWidth = 0;
