@@ -9,7 +9,7 @@ Electron-based Windows sidebar app scaffolded from the product PRD.
 - `M3`: completed
 - `M4`: completed
 - `M5`: completed
-- `M6`: paused after architectural review
+- `M6`: completed
 
 ## Development
 

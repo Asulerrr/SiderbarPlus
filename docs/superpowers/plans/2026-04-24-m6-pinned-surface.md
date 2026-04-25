@@ -575,13 +575,85 @@ Run: `npm run dev`
 
 ---
 
-## Task 9: ResizeHandle 组件 + 主进程提交
+## Task 9: ResizeHandle + 主进程 drag/commit（M5 架构适配版）
+
+**架构背景**：M5 架构下 PanelWindow 宽度 = chrome 宽度（`left+right` 定位）。PRD §5.14 场景 D 的 "CSS-only 伸缩" 在 M5 架构下物理不可达（CSS 改 chrome 无法撑出窗口边界）。Rain 决定不改 M5 架构，接受 **mousemove 期间 rAF 节流 setBounds** 作为替代方案。理由记录在 spec §3.2 与代码注释中。
+
+合规检查：
+- `view.setBounds` 仍遵守铁律 2：一次拖拽仅 mouseup 时 1 次
+- `panelWindow.setBounds` 在 mousemove 期间 rAF 节流触发（明确偏离铁律 3，已记 spec）
 
 **Files:**
 - Create: `src/renderer/panel-chrome/components/ResizeHandle.tsx`
+- Modify: `src/shared/ipc-contracts.ts`（新增 `panelResizeDrag` 频道 + `PanelAPI.resizeDrag`）
+- Modify: `src/preload/panel.ts`（暴露 `resizeDrag`）
+- Modify: `src/main/panels/PanelManager.ts`（新增 `resizeDrag` 方法 + `commitResize` 加注释）
+- Modify: `src/main/windows/WindowManager.ts`（透出 `resizeDragPanel`）
+- Modify: `src/main/ipc/panelHandlers.ts`（注册 `panel:resize-drag` 用 `ipcMain.on`）
 - Modify: `src/renderer/panel-chrome/App.tsx`（挂载 ResizeHandle）
 
-- [ ] **Step 1: 写组件**
+- [ ] **Step 1: 新增 IPC 频道 `panel:resize-drag`（单向 send）**
+
+`src/shared/ipc-contracts.ts`：
+- `IPC_CHANNELS` 中 `panelCommitResize` 旁加 `panelResizeDrag: 'panel:resize-drag'`
+- `PanelAPI` 接口加 `resizeDrag(width: number): void`
+
+`src/preload/panel.ts`：contextBridge 暴露：
+```ts
+resizeDrag: (width: number) => {
+  ipcRenderer.send(IPC_CHANNELS.panelResizeDrag, width);
+},
+```
+用 `send` 不用 `invoke`，减少 IPC 往返。
+
+- [ ] **Step 2: PanelManager 新增 `resizeDrag`**
+
+`src/main/panels/PanelManager.ts` 紧挨 `commitResize` 前加：
+
+```ts
+/**
+ * 拖拽中途的宽度同步（rAF 节流来自渲染进程）。
+ *
+ * 本方法明确偏离 PRD §5.14 铁律 3（"固定模式拖拽期间不改原生窗口几何"）。
+ * 理由：M5 架构下 PanelWindow 宽度 = chrome 宽度，CSS-only 伸缩物理不可达。
+ * 铁律 3 的底层原因（Win32 AppBar 系统工作区重计算导致其他窗口避让）在 v1.0
+ * 不接入 AppBar 时不成立（PRD §5.7.1 明文禁用 AppBar）。剩余的 Electron
+ * setBounds 高频合成闪烁已由渲染进程 rAF 节流到 ≤60fps 控制。
+ * 合规检查：`view.setBounds` 仍遵守铁律 2，仅在 mouseup (commitResize) 调用 1 次。
+ * 详见 docs/superpowers/specs/2026-04-24-m6-design.md §3.2。
+ */
+resizeDrag(newWidth: number): void {
+  if (this.panelMode !== 'pinned' || this.state !== 'open') {
+    return;
+  }
+  const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+  const width = _clampPanelWidth(newWidth, display.workArea.width);
+  this.panelWindow.updateBounds(this.edge, width);
+  this.animationWindow.updateBounds(this.edge, width);
+  // 不动 view；chrome 在 view 前方覆盖"拉出"区域
+}
+```
+
+在 `commitResize` 方法顶部加一行注释：`// mouseup 终点：一次性对齐 view + 持久化 panelDefaultWidth`
+
+- [ ] **Step 3: WindowManager 透出 + panelHandlers 注册**
+
+`src/main/windows/WindowManager.ts` 在 `commitPanelResize` 旁追加：
+```ts
+resizeDragPanel(width: number): void {
+  this.panelManager?.resizeDrag(width);
+}
+```
+
+`src/main/ipc/panelHandlers.ts` 追加（**注意用 `ipcMain.on`，不是 `handle`**）：
+```ts
+ipcMain.on(IPC_CHANNELS.panelResizeDrag, (_event, width: number) => {
+  if (typeof width !== 'number' || !Number.isFinite(width)) return;
+  windowManager.resizeDragPanel(width);
+});
+```
+
+- [ ] **Step 4: 写 ResizeHandle 组件**
 
 `src/renderer/panel-chrome/components/ResizeHandle.tsx`：
 
@@ -591,7 +663,6 @@ import type { Edge } from '../../../shared/types';
 
 interface Props {
   edge: Edge;
-  targetSelector: string;  // 例 '.panel-chrome'，指向要改 width 的根 DOM
 }
 
 const MIN_WIDTH = 320;
@@ -601,29 +672,44 @@ const clampToScreen = (width: number): number => {
   return Math.min(Math.max(Math.round(width), MIN_WIDTH), max);
 };
 
-export const ResizeHandle: React.FC<Props> = ({ edge, targetSelector }) => {
+export const ResizeHandle: React.FC<Props> = ({ edge }) => {
   const activeRef = useRef(false);
+  const rafRef = useRef<number | null>(null);
+  const pendingWidthRef = useRef<number | null>(null);
+
+  const flush = () => {
+    rafRef.current = null;
+    const w = pendingWidthRef.current;
+    pendingWidthRef.current = null;
+    if (w != null) window.panelAPI.resizeDrag(w);
+  };
 
   const onMouseDown = (event: React.MouseEvent) => {
     if (activeRef.current) return;
-    const target = document.querySelector<HTMLElement>(targetSelector);
-    if (!target) return;
     event.preventDefault();
     activeRef.current = true;
 
     const startX = event.screenX;
-    const startWidth = target.offsetWidth;
+    const startWidth = window.innerWidth;  // M5 架构下窗口宽 = chrome 宽
 
     const onMove = (ev: MouseEvent) => {
       const delta = edge === 'right' ? startX - ev.screenX : ev.screenX - startX;
       const next = clampToScreen(startWidth + delta);
-      target.style.width = `${next}px`;
+      pendingWidthRef.current = next;
+      if (rafRef.current == null) {
+        rafRef.current = window.requestAnimationFrame(flush);
+      }
     };
 
     const onUp = () => {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
-      const finalW = clampToScreen(target.offsetWidth);
+      if (rafRef.current != null) {
+        window.cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      const finalW = pendingWidthRef.current ?? clampToScreen(window.innerWidth);
+      pendingWidthRef.current = null;
       activeRef.current = false;
       void window.panelAPI.commitResize(finalW);
     };
@@ -648,43 +734,48 @@ export const ResizeHandle: React.FC<Props> = ({ edge, targetSelector }) => {
 };
 ```
 
-- [ ] **Step 2: 在 panel-chrome 挂载**
+- [ ] **Step 5: 在 panel-chrome 挂载**
 
 `src/renderer/panel-chrome/App.tsx`：
-
 - 顶部 import：`import { ResizeHandle } from './components/ResizeHandle';`
-- 找到 panel-chrome 最外层容器（class 含 `panel-chrome` 的 div）。若没有该 class，选最合适的根 div 并给它 `className="panel-chrome ..."` / 或用现有唯一选择器替代传入 `targetSelector`
-- 在该容器内条件渲染：
+- 在卡片容器 div（line ~513-522，带 `left: CONTENT_INSET / right: CONTENT_INSET` 定位的那个）内部作为首个子元素插入：
 
 ```tsx
-{chromeState.panelMode === 'pinned' && (
-  <ResizeHandle edge={chromeState.edge} targetSelector=".panel-chrome" />
-)}
+{chromeState.panelMode === 'pinned' ? (
+  <ResizeHandle edge={chromeState.edge} />
+) : null}
 ```
 
-> ⚠️ 确认 `targetSelector` 匹配的 DOM 就是需要改 `width` 的那层。如果现有样式用的是 `position: fixed; right: 0` + 定宽，改这个 div 的 `style.width` 即可；若宽度在祖先层控制，改祖先选择器。实际挂载时用 DevTools 手工验证一次再提交。
+（ResizeHandle 用 `position: absolute` 会相对最近有 `position` 的祖先定位；卡片容器本身是 `absolute`，符合要求。）
 
-- [ ] **Step 3: 启动手测**
+- [ ] **Step 6: 启动手测**
 
 Run: `npm run dev`
 
 1. hover 态：内侧无 4px resize 光标 ✅（ResizeHandle 不渲染）
-2. 📌 进入 pinned：内侧出现 `ew-resize` 光标
-3. 按住拖：chrome 宽度实时变
-4. 松开：Panel 窗口宽度一次性对齐；view 同步
+2. 📌 进入 pinned：卡片内侧出现 `ew-resize` 光标
+3. 按住拖：chrome 宽度实时变（窗口跟随），view 停在旧宽度（chrome 盖住 view 旁边的新区域；view 区域短暂有"拉出白边"属可接受视觉代价）
+4. 松开：view 一次性对齐新宽度
 5. 拖到极限：左边界停在 320px，右边界停在 `screen.availWidth × 0.5`
+6. 重启：`panelDefaultWidth` 生效
 
-- [ ] **Step 4: 诊断钩子（调试用）**
+- [ ] **Step 7: 诊断日志**
 
-在 `PanelManager.commitResize` 开头加一行 `logger.info('[m6] commitResize', { newWidth });`。手测期间查日志：一次拖拽 mouseup 只出现 **1 条** 日志。出现多条 = mousemove 误发。
+在 `PanelManager.resizeDrag` 和 `commitResize` 顶部各加一行：
+```ts
+logger.info('[m6] resizeDrag', { newWidth });   // resizeDrag
+logger.info('[m6] commitResize', { newWidth });  // commitResize
+```
 
-手测通过后保留日志（方便后续回归），或删除视习惯。
+手测：一次完整拖拽 → `resizeDrag` 条数约等于拖拽时长 × 60（rAF），`commitResize` **恰好 1 条**。`commitResize > 1` = ResizeHandle mouseup 重入 bug。
 
-- [ ] **Step 5: 提交**
+手测通过后删除这两行日志（不留调试噪音）。
+
+- [ ] **Step 8: 提交**
 
 ```bash
-git add src/renderer/panel-chrome
-git commit -m "feat(m6): add ResizeHandle for pinned-mode width drag"
+git add src/renderer/panel-chrome src/shared/ipc-contracts.ts src/preload/panel.ts src/main/panels/PanelManager.ts src/main/windows/WindowManager.ts src/main/ipc/panelHandlers.ts
+git commit -m "feat(m6): ResizeHandle with rAF-throttled drag (M5 architecture adaptation)"
 ```
 
 ---

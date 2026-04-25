@@ -512,6 +512,7 @@ export default function App(): JSX.Element {
       }}
     >
       <div className="panel-shell absolute inset-0 overflow-hidden bg-[#1b1b1b] text-white">
+        <ResizeHandle edge={chromeState.edge} />
         <div
           className={`absolute flex flex-col overflow-hidden border border-white/6 bg-[#202020] shadow-[0_0_0_1px_rgba(0,0,0,0.18)] ${panelCardRadius} ${panelCardBorder}`}
           style={{
@@ -521,9 +522,6 @@ export default function App(): JSX.Element {
             bottom: CONTENT_INSET
           }}
         >
-          {chromeState.panelMode === 'pinned' ? (
-            <ResizeHandle edge={chromeState.edge} />
-          ) : null}
           <div
             className={`flex h-[76px] shrink-0 items-center justify-between bg-[#202020] px-4 transition-opacity duration-100 ${
               fading ? 'opacity-0' : 'opacity-100'

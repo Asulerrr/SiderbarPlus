@@ -95,11 +95,6 @@ export class PanelManager {
     const config = await this.configStore.read();
     await this.webPanelHost.refreshConfig();
     const descriptor = this.getDescriptor(config, panelId);
-    logger.info('[m6] showPanel read', {
-      panelId,
-      descriptorPreferredWidth: descriptor?.preferredWidth,
-      layoutPanelDefaultWidth: config.layout.panelDefaultWidth
-    });
     if (!descriptor) {
       return;
     }
@@ -378,19 +373,13 @@ export class PanelManager {
    * 详见 docs/superpowers/specs/2026-04-24-m6-design.md §3.2。
    */
   resizeDrag(newWidth: number): void {
-    if (this.panelMode !== 'pinned' || this.state !== 'open') {
+    if (this.state !== 'open') {
       return;
     }
     // Bug 2: clamp must use dock's display (primary), not cursor's display.
     // 双屏下鼠标可能在副屏，但 dock 永远贴主屏，必须用主屏 workArea 约束宽度。
     const display = screen.getPrimaryDisplay();
     const width = _clampPanelWidth(newWidth, display.workArea.width);
-    logger.info('[m6] resize clamp', {
-      phase: 'drag',
-      newWidth,
-      workAreaWidth: display.workArea.width,
-      clamped: width
-    });
     // Bug 3: 宽度未变化时跳过 setBounds，避免 Windows 相同 bounds 仍重绘闪烁。
     if (this.lastResizeDragWidth === width) {
       return;
@@ -408,12 +397,6 @@ export class PanelManager {
     // Bug 2: 同 resizeDrag，用 dock 所在屏（主屏）workArea。
     const display = screen.getPrimaryDisplay();
     const width = _clampPanelWidth(newWidth, display.workArea.width);
-    logger.info('[m6] resize clamp', {
-      phase: 'commit',
-      newWidth,
-      workAreaWidth: display.workArea.width,
-      clamped: width
-    });
 
     this.panelWindow.updateBounds(this.edge, width);
     // animationWindow 在 commit 保留同步，保证下次 open/close 动画 bounds 正确
@@ -451,22 +434,13 @@ export class PanelManager {
     } else {
       await this.configStore.update({ layout: { panelDefaultWidth: width } });
     }
-    logger.info('[m6] commitResize persisted', {
-      panelId: this.currentPanelId,
-      width,
-      isBuiltin,
-      matchesUserPanel
-    });
-    // Bug 4 诊断：回读校验，区分"写入失败"vs"读取时未取到最新"。
-    const verifyConfig = await this.configStore.read();
-    const verifyPanel = this.currentPanelId
-      ? verifyConfig.panels.find((p) => p.id === this.currentPanelId)
-      : null;
-    logger.info('[m6] commitResize verify', {
-      panelId: this.currentPanelId,
-      persistedPreferredWidth: verifyPanel?.preferredWidth,
-      persistedDefaultWidth: verifyConfig.layout.panelDefaultWidth
-    });
+
+    // hover 模式下，拖动期间通过父容器 mousedown 设置了 sticky=true，
+    // 拖完需主动清掉，否则鼠标离开 panel 也不会触发收回。
+    // pinned 模式不依赖 sticky（scheduleHide 内有 panelMode 检查）。
+    if (this.panelMode === 'hover') {
+      this.sticky = false;
+    }
   }
 
   private async switchPanel(descriptor: PanelDescriptor, edge: Edge): Promise<void> {

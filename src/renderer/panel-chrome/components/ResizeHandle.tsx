@@ -9,7 +9,7 @@ const MIN_WIDTH = 320;
 
 const clampToScreen = (width: number): number => {
   // Bug 12: 取 availWidth / width 的较小值兜底，防止 DPI / 多屏边界返回异常大值导致上限失效
-  const max = Math.floor(Math.min(window.screen.availWidth, window.screen.width) * 0.5);
+  const max = Math.floor(Math.min(window.screen.availWidth, window.screen.width) * 0.8);
   return Math.min(Math.max(Math.round(width), MIN_WIDTH), max);
 };
 
@@ -59,10 +59,12 @@ export const ResizeHandle: React.FC<Props> = ({ edge }) => {
     window.addEventListener('mouseup', onUp);
   };
 
+  // ResizeHandle 落在 panel-shell 顶级，占满外侧 CONTENT_INSET (8px) 间隙：
+  // 该区域无 WebContentsView 覆盖、无内层 card 遮挡，能稳定接收 mousedown。
   const positionStyle: React.CSSProperties =
     edge === 'right'
-      ? { left: 0, top: 0, bottom: 0, width: 4 }
-      : { right: 0, top: 0, bottom: 0, width: 4 };
+      ? { left: 0, top: 0, bottom: 0, width: 8 }
+      : { right: 0, top: 0, bottom: 0, width: 8 };
 
   return (
     <div

@@ -21,6 +21,7 @@ export class PanelWindow {
       ...panelBounds,
       minWidth: this.config.layout.panelDefaultWidth,
       minHeight: 480,
+      resizable: false,
       frame: false,
       transparent: true,
       show: false,
