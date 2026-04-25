@@ -8,6 +8,7 @@ import { registerBrowserHandlers } from './browserHandlers';
 import { registerConfigHandlers } from './configHandlers';
 import { registerFaviconHandlers } from './faviconHandlers';
 import { registerPanelHandlers } from './panelHandlers';
+import { registerSettingsHandlers } from './settingsHandlers';
 
 export const registerIpcHandlers = (
   configStore: ConfigStore,
@@ -21,4 +22,5 @@ export const registerIpcHandlers = (
   registerAppHandlers(windowManager, trayManager, configStore, autoLaunchService);
   registerBrowserHandlers();
   registerFaviconHandlers();
+  registerSettingsHandlers(configStore, windowManager);
 };

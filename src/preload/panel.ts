@@ -76,7 +76,13 @@ const panelAPI: PanelAPI = {
   commitResize: (width) => ipcRenderer.invoke(IPC_CHANNELS.panelCommitResize, width),
   resizeDrag: (width) => {
     ipcRenderer.send(IPC_CHANNELS.panelResizeDrag, width);
-  }
+  },
+  openConfigFolder: () => ipcRenderer.invoke(IPC_CHANNELS.settingsOpenConfigFolder),
+  exportConfig: () => ipcRenderer.invoke(IPC_CHANNELS.settingsExportConfig),
+  importConfig: () => ipcRenderer.invoke(IPC_CHANNELS.settingsImportConfig),
+  clearStorageData: () => ipcRenderer.invoke(IPC_CHANNELS.settingsClearStorageData),
+  checkUpdate: () => ipcRenderer.invoke(IPC_CHANNELS.settingsCheckUpdate),
+  quitApp: () => ipcRenderer.invoke(IPC_CHANNELS.settingsQuitApp)
 };
 
 contextBridge.exposeInMainWorld('panelAPI', panelAPI);

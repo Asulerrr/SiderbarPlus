@@ -17,7 +17,7 @@ export class WindowManager {
   private dockVisibleBeforeFullscreen: boolean | null = null;
 
   constructor(
-    private readonly config: AppConfig,
+    private config: AppConfig,
     private readonly configStore: ConfigStore,
     private readonly emitPanelState: (state: {
       activePanelId: string | null;
@@ -214,5 +214,19 @@ export class WindowManager {
 
   resizeDragPanel(width: number): void {
     this.panelManager?.resizeDrag(width);
+  }
+
+  async reloadAfterImport(nextConfig: AppConfig): Promise<void> {
+    this.dockWindow?.getBrowserWindow()?.destroy();
+    this.panelWindow?.getBrowserWindow()?.destroy();
+    this.panelAnimationWindow?.getBrowserWindow()?.destroy();
+    this.panelMenuWindow?.getBrowserWindow()?.destroy();
+    this.dockWindow = null;
+    this.panelWindow = null;
+    this.panelAnimationWindow = null;
+    this.panelMenuWindow = null;
+    this.panelManager = null;
+    this.config = nextConfig;
+    this.createWindows();
   }
 }

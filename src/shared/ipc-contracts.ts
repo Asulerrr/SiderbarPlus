@@ -68,7 +68,13 @@ export const IPC_CHANNELS = {
   panelNavigationState: 'panel:navigation-state',
   panelTogglePin: 'panel:toggle-pin',
   panelCommitResize: 'panel:commit-resize',
-  panelResizeDrag: 'panel:resize-drag'
+  panelResizeDrag: 'panel:resize-drag',
+  settingsOpenConfigFolder: 'settings:open-config-folder',
+  settingsExportConfig: 'settings:export-config',
+  settingsImportConfig: 'settings:import-config',
+  settingsClearStorageData: 'settings:clear-storage-data',
+  settingsCheckUpdate: 'settings:check-update',
+  settingsQuitApp: 'settings:quit-app'
 } as const;
 
 export interface DockAPI {
@@ -123,6 +129,12 @@ export interface PanelAPI {
   togglePin: () => Promise<IpcResult<void>>;
   commitResize: (width: number) => Promise<IpcResult<void>>;
   resizeDrag: (width: number) => void;
+  openConfigFolder: () => Promise<IpcResult<void>>;
+  exportConfig: () => Promise<IpcResult<{ canceled: boolean; path?: string }>>;
+  importConfig: () => Promise<IpcResult<{ canceled: boolean; restartRequired: boolean }>>;
+  clearStorageData: () => Promise<IpcResult<void>>;
+  checkUpdate: () => Promise<IpcResult<{ status: 'placeholder' }>>;
+  quitApp: () => Promise<IpcResult<void>>;
 }
 
 export interface BuiltinAPI {
