@@ -47,6 +47,10 @@ export class ConfigStore {
         ...current.behavior,
         ...patch.behavior
       },
+      appearance: {
+        ...current.appearance,
+        ...patch.appearance
+      },
       panels: patch.panels ?? current.panels,
       meta: {
         ...current.meta,

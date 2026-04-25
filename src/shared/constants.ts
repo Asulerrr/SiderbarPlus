@@ -111,6 +111,10 @@ export const DEFAULT_CONFIG = (): AppConfig => {
       hoverCloseDelayMs: 300,
       keepAudioOnHide: true
     },
+    appearance: {
+      themeMode: 'system',
+      customColor: '#1B1B1BFF'
+    },
     panels: isDev ? buildDevTestPanels() : [],
     meta: {
       createdAt: now,

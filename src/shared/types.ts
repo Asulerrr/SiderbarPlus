@@ -34,6 +34,14 @@ export interface PanelDescriptor {
   builtin?: BuiltinPanelConfig;
 }
 
+export type ThemeMode = 'system' | 'light' | 'dark' | 'custom';
+
+export interface AppearanceConfig {
+  themeMode: ThemeMode;
+  /** '#RRGGBBAA'，仅 themeMode='custom' 时生效 */
+  customColor: string;
+}
+
 export interface AppConfig {
   schemaVersion: 1;
   app: {
@@ -53,6 +61,7 @@ export interface AppConfig {
     hoverCloseDelayMs: number;
     keepAudioOnHide: boolean;
   };
+  appearance: AppearanceConfig;
   panels: PanelDescriptor[];
   meta: {
     createdAt: string;
