@@ -62,6 +62,17 @@ export class WindowManager {
     this.dockWindow?.show();
   }
 
+  /**
+   * 第二实例触发时调用：确保 Dock 可见并置顶。
+   * - 用户从托盘隐藏过 Dock：show 恢复
+   * - 全屏窗口曾压过 Dock：moveTop 提到最前
+   * - 不抢 focus（避免打断当前前台应用）
+   */
+  activateExistingInstance(): void {
+    this.dockWindow?.show();
+    this.dockWindow?.getBrowserWindow()?.moveTop();
+  }
+
   toggleDockVisibility(): boolean {
     if (this.dockWindow?.isVisible()) {
       this.hideDockToTray();

@@ -64,15 +64,26 @@ const bootstrap = async (): Promise<void> => {
   logger.info(`${APP_NAME} started`);
 };
 
-app.whenReady().then(() => {
-  void bootstrap();
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0 && windowManager) {
-      windowManager.createWindows();
-    }
+// PRD §5.9.3 单实例锁：第二个实例立即退出，已运行实例激活 Dock。
+// 必须在 app.whenReady() 之前请求锁。
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    windowManager?.activateExistingInstance();
   });
-});
+
+  app.whenReady().then(() => {
+    void bootstrap();
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0 && windowManager) {
+        windowManager.createWindows();
+      }
+    });
+  });
+}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
