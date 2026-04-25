@@ -229,6 +229,11 @@ export default function App(): JSX.Element {
           setSiteInfoError(result.error);
         }
         return;
+      case 'settings':
+        resetSiteForm();
+        setSiteInfo(null);
+        setSiteInfoError(null);
+        return;
       default:
         setSiteInfo(null);
         setSiteInfoError(null);
@@ -483,6 +488,7 @@ export default function App(): JSX.Element {
   const isEditSitePanel = chromeState.builtinWidgetId === 'edit-site';
   const isSiteFormPanel = isAddSitePanel || isEditSitePanel;
   const isSiteInfoPanel = chromeState.builtinWidgetId === 'site-info';
+  const isSettingsPanel = chromeState.builtinWidgetId === 'settings';
   const targetPanel =
     chromeState.builtinTargetPanelId && config
       ? config.panels.find((panel) => panel.id === chromeState.builtinTargetPanelId) ?? null
@@ -817,6 +823,8 @@ export default function App(): JSX.Element {
                   </button>
                 </div>
               </div>
+            ) : isSettingsPanel ? (
+              <div className="p-4 text-white">Settings (coming in next task)</div>
             ) : contentSnapshotDataUrl ? (
               <img
                 src={contentSnapshotDataUrl}

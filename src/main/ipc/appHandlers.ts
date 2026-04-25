@@ -1,5 +1,5 @@
 import { dialog, ipcMain, Menu, screen } from 'electron';
-import { APP_NAME, APP_VERSION } from '../../shared/constants';
+import { APP_NAME, APP_VERSION, BUILTIN_SETTINGS_ID } from '../../shared/constants';
 import { IPC_CHANNELS } from '../../shared/ipc-contracts';
 import type { IpcResult } from '../../shared/types';
 import type { AutoLaunchService } from '../services/AutoLaunchService';
@@ -109,12 +109,7 @@ export const registerAppHandlers = (
         {
           label: '设置',
           click: () => {
-            void dialog.showMessageBox({
-              type: 'info',
-              title: '设置',
-              message: '设置面板将在 M8 实现。',
-              detail: 'M2 阶段先保留入口。'
-            });
+            void windowManager.showPanel(BUILTIN_SETTINGS_ID, true);
           }
         },
         {

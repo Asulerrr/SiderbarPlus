@@ -1,4 +1,4 @@
-export type BuiltinWidgetId = 'add-site' | 'edit-site' | 'site-info';
+export type BuiltinWidgetId = 'add-site' | 'edit-site' | 'site-info' | 'settings';
 
 export interface BuiltinPanelRoute {
   widgetId: BuiltinWidgetId;
@@ -23,7 +23,7 @@ export const buildBuiltinPanelId = (
 };
 
 export const parseBuiltinPanelId = (panelId: string): BuiltinPanelRoute | null => {
-  const match = panelId.match(/^builtin:(add-site|edit-site|site-info)(?::(.+))?$/);
+  const match = panelId.match(/^builtin:(add-site|edit-site|site-info|settings)(?::(.+))?$/);
   if (!match) {
     return null;
   }

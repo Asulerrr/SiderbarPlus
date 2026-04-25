@@ -31,6 +31,13 @@ test('builds and parses target-backed builtin panel ids', () => {
   });
 });
 
+test('builds and parses settings builtin panel id', () => {
+  const id = buildBuiltinPanelId('settings');
+  assert.equal(id, 'builtin:settings');
+  const route = parseBuiltinPanelId(id);
+  assert.deepEqual(route, { widgetId: 'settings' });
+});
+
 test('returns null for invalid builtin panel ids', () => {
   assert.equal(parseBuiltinPanelId('github'), null);
   assert.equal(parseBuiltinPanelId('builtin:edit-site'), null);

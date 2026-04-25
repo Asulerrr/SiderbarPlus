@@ -1,5 +1,5 @@
 import { BrowserWindow, screen, WebContentsView } from 'electron';
-import { BUILTIN_ADD_SITE_ID } from '../../shared/constants';
+import { BUILTIN_ADD_SITE_ID, BUILTIN_SETTINGS_ID } from '../../shared/constants';
 import { IPC_CHANNELS } from '../../shared/ipc-contracts';
 import { buildBuiltinPanelId, parseBuiltinPanelId } from '../../shared/builtinPanels';
 import type { AppConfig, Edge, PanelDescriptor, PanelState, SiteInfo } from '../../shared/types';
@@ -803,6 +803,24 @@ export class PanelManager {
         builtin: {
           widgetId: 'site-info',
           targetPanelId: builtinRoute.targetPanelId
+        }
+      };
+    }
+
+    if (builtinRoute?.widgetId === 'settings') {
+      return {
+        id: BUILTIN_SETTINGS_ID,
+        type: 'builtin',
+        title: '设置',
+        iconSource: {
+          kind: 'letter',
+          fallbackLetter: '⚙',
+          fallbackColor: '#3a3a3a'
+        },
+        order: -1,
+        preferredWidth: config.layout.panelDefaultWidth,
+        builtin: {
+          widgetId: 'settings'
         }
       };
     }
