@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { APP_ID, APP_NAME, APP_VERSION } from '../shared/constants';
 import type { PanelState } from '../shared/types';
 import { registerIpcHandlers } from './ipc';
+import { AutoLaunchService } from './services/AutoLaunchService';
 import { ConfigStore } from './store/ConfigStore';
 import { resetDevelopmentData } from './utils/devReset';
 import { TrayManager } from './tray/TrayManager';
@@ -11,6 +12,11 @@ import { WindowManager } from './windows/WindowManager';
 
 let windowManager: WindowManager | null = null;
 let trayManager: TrayManager | null = null;
+
+// PRD §5.9.1：--autostart 参数代表静默启动（开机触发）。当前应用启动后 dock
+// 自动 showInactive，无欢迎弹窗，与正常启动无可见差异；保留参数解析与日志，
+// 后续若加欢迎/首次引导 UI 时可据此跳过。
+const isAutoStart = process.argv.includes('--autostart');
 
 const emitPanelState = (state: PanelState): void => {
   for (const window of BrowserWindow.getAllWindows()) {
@@ -30,6 +36,10 @@ const bootstrap = async (): Promise<void> => {
 
   const configStore = new ConfigStore();
   const config = await configStore.initialize();
+
+  const autoLaunchService = new AutoLaunchService();
+  // 启动时确保系统注册表与 config 一致（用户改了 config 没切换前关机的情况）
+  await autoLaunchService.sync(config.app.autoLaunch);
 
   windowManager = new WindowManager(config, configStore, emitPanelState);
   windowManager.createWindows();
@@ -59,9 +69,9 @@ const bootstrap = async (): Promise<void> => {
   });
   trayManager.create();
 
-  registerIpcHandlers(configStore, windowManager, trayManager);
+  registerIpcHandlers(configStore, windowManager, trayManager, autoLaunchService);
 
-  logger.info(`${APP_NAME} started`);
+  logger.info(`${APP_NAME} started`, { isAutoStart });
 };
 
 // PRD §5.9.3 单实例锁：第二个实例立即退出，已运行实例激活 Dock。

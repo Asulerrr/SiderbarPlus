@@ -3,8 +3,12 @@ import { IPC_CHANNELS } from '../../shared/ipc-contracts';
 import type { AppConfig, IpcResult } from '../../shared/types';
 import { logger } from '../utils/logger';
 import type { ConfigStore } from '../store/ConfigStore';
+import type { AutoLaunchService } from '../services/AutoLaunchService';
 
-export const registerConfigHandlers = (configStore: ConfigStore): void => {
+export const registerConfigHandlers = (
+  configStore: ConfigStore,
+  autoLaunchService: AutoLaunchService
+): void => {
   ipcMain.handle(IPC_CHANNELS.configRead, async (): Promise<IpcResult<AppConfig>> => {
     try {
       const config = await configStore.read();
@@ -22,7 +26,12 @@ export const registerConfigHandlers = (configStore: ConfigStore): void => {
     IPC_CHANNELS.configUpdate,
     async (_event, patch: Partial<AppConfig>): Promise<IpcResult<AppConfig>> => {
       try {
+        const before = await configStore.read();
         const config = await configStore.update(patch);
+        // autoLaunch 变化时同步注册表（PRD §5.9.1）
+        if (before.app.autoLaunch !== config.app.autoLaunch) {
+          await autoLaunchService.sync(config.app.autoLaunch);
+        }
         return { ok: true, data: config };
       } catch (error) {
         logger.error('config:update failed', error);

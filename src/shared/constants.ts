@@ -98,7 +98,7 @@ export const DEFAULT_CONFIG = (): AppConfig => {
   return {
     schemaVersion: 1,
     app: {
-      autoLaunch: true,
+      autoLaunch: false,
       autoShowDock: true,
       hideOnFullscreen: true
     },

@@ -1,3 +1,4 @@
+import type { AutoLaunchService } from '../services/AutoLaunchService';
 import type { ConfigStore } from '../store/ConfigStore';
 import type { TrayManager } from '../tray/TrayManager';
 import type { WindowManager } from '../windows/WindowManager';
@@ -10,9 +11,10 @@ import { registerPanelHandlers } from './panelHandlers';
 export const registerIpcHandlers = (
   configStore: ConfigStore,
   windowManager: WindowManager,
-  trayManager: TrayManager
+  trayManager: TrayManager,
+  autoLaunchService: AutoLaunchService
 ): void => {
-  registerConfigHandlers(configStore);
+  registerConfigHandlers(configStore, autoLaunchService);
   registerPanelHandlers(configStore, windowManager);
   registerAppHandlers(windowManager, trayManager);
   registerBrowserHandlers();
