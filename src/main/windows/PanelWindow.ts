@@ -10,7 +10,7 @@ export class PanelWindow {
   constructor(private readonly config: AppConfig) {}
 
   create(): BrowserWindow {
-    const dockBounds = getDockBounds(this.config.layout.edge);
+    const dockBounds = getDockBounds(this.config.layout.edge, this.config.layout.displayId);
     const panelBounds = getPanelBounds(
       this.config.layout.edge,
       dockBounds,
@@ -74,12 +74,12 @@ export class PanelWindow {
     return this.window?.getContentBounds() ?? null;
   }
 
-  updateBounds(edge: AppConfig['layout']['edge'], panelWidth: number): void {
+  updateBounds(edge: AppConfig['layout']['edge'], panelWidth: number, displayId?: number): void {
     if (!this.window) {
       return;
     }
 
-    const dockBounds = getDockBounds(edge);
+    const dockBounds = getDockBounds(edge, displayId);
     this.window.setBounds(getPanelBounds(edge, dockBounds, panelWidth));
   }
 }

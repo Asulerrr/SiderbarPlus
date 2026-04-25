@@ -16,9 +16,9 @@ export const registerIpcHandlers = (
   autoLaunchService: AutoLaunchService,
   fullscreenWatcher: FullscreenWatcher
 ): void => {
-  registerConfigHandlers(configStore, autoLaunchService, fullscreenWatcher);
+  registerConfigHandlers(configStore, autoLaunchService, fullscreenWatcher, windowManager);
   registerPanelHandlers(configStore, windowManager);
-  registerAppHandlers(windowManager, trayManager);
+  registerAppHandlers(windowManager, trayManager, configStore, autoLaunchService);
   registerBrowserHandlers();
   registerFaviconHandlers();
 };

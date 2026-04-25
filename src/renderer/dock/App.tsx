@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { APP_NAME, APP_VERSION, BUILTIN_ADD_SITE_ID } from '@shared/constants';
+import { BUILTIN_ADD_SITE_ID } from '@shared/constants';
 import { shouldShowDockActiveIndicator } from '@shared/dockLayout';
 import type { AppConfig, PanelDescriptor, PanelState } from '@shared/types';
 import { DockFooter } from './components/DockFooter';
 import { DockIconList } from './components/DockIconList';
-import { QuickMenu } from './components/QuickMenu';
 
 export default function App(): JSX.Element {
   const [config, setConfig] = useState<AppConfig | null>(null);
@@ -15,7 +14,6 @@ export default function App(): JSX.Element {
     panelMode: 'hover',
     edge: 'right'
   });
-  const [menuOpen, setMenuOpen] = useState(false);
   const [highlightedPanelId, setHighlightedPanelId] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const hoverTimerRef = useRef<number | null>(null);
@@ -67,20 +65,10 @@ export default function App(): JSX.Element {
       }
     });
 
-    const handleWindowClick = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (rootRef.current && !rootRef.current.contains(target)) {
-        setMenuOpen(false);
-      }
-    };
-
-    window.addEventListener('click', handleWindowClick);
-
     return () => {
       mounted = false;
       disposePanelState();
       disposePanelsUpdated();
-      window.removeEventListener('click', handleWindowClick);
       if (hoverTimerRef.current) {
         window.clearTimeout(hoverTimerRef.current);
       }
@@ -109,7 +97,6 @@ export default function App(): JSX.Element {
   };
 
   const handleActivatePanel = async (id: string): Promise<void> => {
-    setMenuOpen(false);
     if (hoverTimerRef.current) {
       window.clearTimeout(hoverTimerRef.current);
     }
@@ -120,25 +107,7 @@ export default function App(): JSX.Element {
   };
 
   const handleHideDock = async (): Promise<void> => {
-    setMenuOpen(false);
     await window.dockAPI.hideToTray();
-  };
-
-  const handleToggleAutoLaunch = async (): Promise<void> => {
-    if (!config) {
-      return;
-    }
-
-    const result = await window.dockAPI.updateConfig({
-      app: {
-        ...config.app,
-        autoLaunch: !config.app.autoLaunch
-      }
-    });
-
-    if (result.ok) {
-      setConfig(result.data);
-    }
   };
 
   const handleContextMenu = (
@@ -146,7 +115,6 @@ export default function App(): JSX.Element {
     panel: PanelDescriptor
   ): void => {
     event.preventDefault();
-    setMenuOpen(false);
     void window.dockAPI.openPanelContextMenu(panel.id);
   };
 
@@ -172,7 +140,8 @@ export default function App(): JSX.Element {
     }, hoverDelayMs);
   };
 
-  const edge = config?.layout.edge ?? panelState.edge ?? 'right';
+  // panelState.edge 由 main 实时推送，是权威来源；config 只用作首屏兜底（IPC 推送前）
+  const edge = panelState.edge ?? config?.layout.edge ?? 'right';
   const activeIndicatorPanelId = shouldShowDockActiveIndicator(panelState)
     ? panelState.activePanelId
     : null;
@@ -209,30 +178,13 @@ export default function App(): JSX.Element {
 
       <div className="absolute inset-x-0 bottom-0 z-10">
         <DockFooter
-          menuOpen={menuOpen}
           onShowAddSite={handleShowBuiltinPlaceholder}
-          onToggleMenu={() => {
-            setMenuOpen((current) => !current);
+          onOpenQuickMenu={() => {
+            void window.dockAPI.openQuickMenu();
           }}
           onHideDock={() => void handleHideDock()}
         />
       </div>
-
-      {menuOpen && config ? (
-        <QuickMenu
-          edge={edge}
-          autoLaunch={config.app.autoLaunch}
-          onToggleAutoLaunch={() => void handleToggleAutoLaunch()}
-          onOpenSettings={() => {
-            setMenuOpen(false);
-            window.alert('设置面板将在 M8 实现。');
-          }}
-          onOpenAbout={() => {
-            setMenuOpen(false);
-            window.alert(`${APP_NAME}\n版本 ${APP_VERSION}\nM2 阶段占位入口`);
-          }}
-        />
-      ) : null}
 
       <span className="sr-only">{config ? `Dock ready on ${edge} edge` : 'Dock loading'}</span>
     </main>

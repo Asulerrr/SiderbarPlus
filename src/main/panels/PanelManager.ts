@@ -8,7 +8,7 @@ import type { ConfigStore } from '../store/ConfigStore';
 import type { PanelAnimationWindow } from '../windows/PanelAnimationWindow';
 import type { PanelMenuWindow } from '../windows/PanelMenuWindow';
 import type { PanelWindow } from '../windows/PanelWindow';
-import { getDockBounds } from '../utils/display';
+import { getDockBounds, getTargetDisplay } from '../utils/display';
 import { getPreferredPanelWidth } from '../utils/panelBounds';
 import { WebPanelHost } from './WebPanelHost';
 
@@ -51,6 +51,7 @@ export class PanelManager {
   private sticky = false;
   private panelMode: 'hover' | 'pinned' = 'hover';
   private edge: Edge = 'right';
+  private displayId: number | undefined = undefined;
   private hoverCloseDelayMs = 300;
   private pendingDestroyId: string | null = null;
   private lastResizeDragWidth: number | null = null;
@@ -345,6 +346,47 @@ export class PanelManager {
     this.snapshots.delete(panelId);
   }
 
+  /**
+   * PRD §5.8.2 切换贴边方向前的强制关闭：
+   * - 取消所有计时器/动画 token
+   * - 重置 panelMode 至 hover、清 sticky
+   * - 同步隐藏 panel/animation 窗口（不走收起动画 — PRD 要求"无动画"）
+   * - view bounds 归零，等待下次 hoverPanel 时重新挂载
+   */
+  forceCloseAndResetMode(nextEdge?: Edge, nextDisplayId?: number): void {
+    this.cancelCloseTimer();
+    this.closeMenu();
+    this.stopPointerTracking();
+    this.lifecycleToken++;
+    this.switchToken++;
+
+    if (this.currentPanelId) {
+      const view = this.webPanelHost.getView(this.currentPanelId);
+      if (view) {
+        view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
+      }
+    }
+
+    this.panelWindowRef.setOpacity(0);
+    this.panelWindowRef.setIgnoreMouseEvents(true, { forward: true });
+    this.hideAnimationWindow();
+
+    this.panelMode = 'hover';
+    this.sticky = false;
+    this.lastResizeDragWidth = null;
+    this.pointerOutsideSince = null;
+    this.pendingDestroyId = null;
+    this.state = 'closed';
+    this.currentPanelId = null;
+    if (nextEdge) {
+      this.edge = nextEdge;
+    }
+    if (nextDisplayId !== undefined) {
+      this.displayId = nextDisplayId;
+    }
+    this.emitState(this.edge, this.panelMode);
+  }
+
   async togglePin(): Promise<void> {
     if (this.panelMode === 'hover') {
       this.panelMode = 'pinned';
@@ -376,16 +418,16 @@ export class PanelManager {
     if (this.state !== 'open') {
       return;
     }
-    // Bug 2: clamp must use dock's display (primary), not cursor's display.
-    // 双屏下鼠标可能在副屏，但 dock 永远贴主屏，必须用主屏 workArea 约束宽度。
-    const display = screen.getPrimaryDisplay();
+    // Bug 2: clamp must use dock's display, not cursor's display.
+    // 双屏下鼠标可能在另一屏，但 dock 在 displayId 指定屏，必须用该屏 workArea 约束宽度。
+    const display = getTargetDisplay(this.displayId);
     const width = _clampPanelWidth(newWidth, display.workArea.width);
     // Bug 3: 宽度未变化时跳过 setBounds，避免 Windows 相同 bounds 仍重绘闪烁。
     if (this.lastResizeDragWidth === width) {
       return;
     }
     this.lastResizeDragWidth = width;
-    this.panelWindow.updateBounds(this.edge, width);
+    this.panelWindow.updateBounds(this.edge, width, this.displayId);
     // Bug 13: 拖拽期间不动 animationWindow，避免双 transparent 窗口同帧 setBounds 频闪
     // 不动 view；chrome 在 view 前方覆盖"拉出"区域
   }
@@ -394,13 +436,13 @@ export class PanelManager {
     // Bug 3: 拖拽结束，重置去重缓存，下次拖拽干净起步。
     this.lastResizeDragWidth = null;
     // mouseup 终点：一次性对齐 view + 持久化 panelDefaultWidth
-    // Bug 2: 同 resizeDrag，用 dock 所在屏（主屏）workArea。
-    const display = screen.getPrimaryDisplay();
+    // Bug 2: 同 resizeDrag，用 dock 所在屏 workArea。
+    const display = getTargetDisplay(this.displayId);
     const width = _clampPanelWidth(newWidth, display.workArea.width);
 
-    this.panelWindow.updateBounds(this.edge, width);
+    this.panelWindow.updateBounds(this.edge, width, this.displayId);
     // animationWindow 在 commit 保留同步，保证下次 open/close 动画 bounds 正确
-    this.animationWindow.updateBounds(this.edge, width);
+    this.animationWindow.updateBounds(this.edge, width, this.displayId);
 
     const view = this.currentPanelId
       ? this.webPanelHost.getView(this.currentPanelId)
@@ -477,6 +519,7 @@ export class PanelManager {
 
   private applyHoverConfig(config: AppConfig): void {
     this.edge = config.layout.edge;
+    this.displayId = config.layout.displayId;
     this.hoverCloseDelayMs = config.behavior.hoverCloseDelayMs;
   }
 
@@ -486,8 +529,8 @@ export class PanelManager {
       config.layout.panelDefaultWidth
     );
 
-    this.panelWindow.updateBounds(config.layout.edge, panelWidth);
-    this.animationWindow.updateBounds(config.layout.edge, panelWidth);
+    this.panelWindow.updateBounds(config.layout.edge, panelWidth, config.layout.displayId);
+    this.animationWindow.updateBounds(config.layout.edge, panelWidth, config.layout.displayId);
   }
 
   private startPointerTracking(): void {
@@ -539,7 +582,7 @@ export class PanelManager {
   private isCursorInsideInteractiveArea(): boolean {
     const cursor = screen.getCursorScreenPoint();
     const panelBounds = this.panelWindowRef.getBounds();
-    const dockBounds = getDockBounds(this.edge);
+    const dockBounds = getDockBounds(this.edge, this.displayId);
     const menuBrowserWindow = this.menuWindow.getBrowserWindow();
     const menuBounds =
       menuBrowserWindow && menuBrowserWindow.isVisible() ? menuBrowserWindow.getBounds() : null;

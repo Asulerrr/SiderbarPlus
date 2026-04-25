@@ -11,7 +11,7 @@ export class DockWindow {
   constructor(private readonly config: AppConfig) {}
 
   create(): BrowserWindow {
-    const bounds = getDockBounds(this.config.layout.edge);
+    const bounds = getDockBounds(this.config.layout.edge, this.config.layout.displayId);
 
     this.window = new BrowserWindow({
       ...bounds,
@@ -66,5 +66,12 @@ export class DockWindow {
 
   isVisible(): boolean {
     return this.window?.isVisible() ?? false;
+  }
+
+  updateBounds(edge: AppConfig['layout']['edge'], displayId?: number): void {
+    if (!this.window) {
+      return;
+    }
+    this.window.setBounds(getDockBounds(edge, displayId));
   }
 }

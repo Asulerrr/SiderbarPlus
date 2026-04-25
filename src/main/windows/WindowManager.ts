@@ -97,6 +97,21 @@ export class WindowManager {
     this.dockVisibleBeforeFullscreen = null;
   }
 
+  /**
+   * PRD §5.8 左右贴边切换：
+   * - 强制收起当前 panel（无动画）
+   * - 重定位 dock / panel / animation 窗口到新边
+   * - 持久化已由 configStore 完成（caller 负责），此处仅同步 native bounds
+   */
+  applyEdgeChange(config: AppConfig): void {
+    const edge = config.layout.edge;
+    const displayId = config.layout.displayId;
+    this.panelManager?.forceCloseAndResetMode(edge, displayId);
+    this.dockWindow?.updateBounds(edge, displayId);
+    this.panelWindow?.updateBounds(edge, config.layout.panelDefaultWidth, displayId);
+    this.panelAnimationWindow?.updateBounds(edge, config.layout.panelDefaultWidth, displayId);
+  }
+
   toggleDockVisibility(): boolean {
     if (this.dockWindow?.isVisible()) {
       this.hideDockToTray();

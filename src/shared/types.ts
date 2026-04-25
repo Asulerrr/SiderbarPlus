@@ -44,6 +44,9 @@ export interface AppConfig {
   layout: {
     edge: Edge;
     panelDefaultWidth: number;
+    /** 持久化的显示器 ID（screen.getAllDisplays().id）。
+     * 缺失或对应显示器已断开时回退到主屏。 */
+    displayId?: number;
   };
   behavior: {
     hoverOpenDelayMs: number;

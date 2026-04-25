@@ -5,11 +5,13 @@ import { logger } from '../utils/logger';
 import type { ConfigStore } from '../store/ConfigStore';
 import type { AutoLaunchService } from '../services/AutoLaunchService';
 import type { FullscreenWatcher } from '../services/FullscreenWatcher';
+import type { WindowManager } from '../windows/WindowManager';
 
 export const registerConfigHandlers = (
   configStore: ConfigStore,
   autoLaunchService: AutoLaunchService,
-  fullscreenWatcher: FullscreenWatcher
+  fullscreenWatcher: FullscreenWatcher,
+  windowManager: WindowManager
 ): void => {
   ipcMain.handle(IPC_CHANNELS.configRead, async (): Promise<IpcResult<AppConfig>> => {
     try {
@@ -33,6 +35,10 @@ export const registerConfigHandlers = (
         // autoLaunch 变化时同步注册表（PRD §5.9.1）
         if (before.app.autoLaunch !== config.app.autoLaunch) {
           await autoLaunchService.sync(config.app.autoLaunch);
+        }
+        // layout.edge 变化时强制收起 panel + 重定位窗口（PRD §5.8）
+        if (before.layout.edge !== config.layout.edge) {
+          windowManager.applyEdgeChange(config);
         }
         // hideOnFullscreen 变化时启停 watcher（PRD §5.9.4）
         if (before.app.hideOnFullscreen !== config.app.hideOnFullscreen) {

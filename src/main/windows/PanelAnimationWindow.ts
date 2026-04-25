@@ -11,7 +11,7 @@ export class PanelAnimationWindow {
   constructor(private readonly config: AppConfig) {}
 
   create(): BrowserWindow {
-    const dockBounds = getDockBounds(this.config.layout.edge);
+    const dockBounds = getDockBounds(this.config.layout.edge, this.config.layout.displayId);
     const panelBounds = getPanelBounds(
       this.config.layout.edge,
       dockBounds,
@@ -70,12 +70,12 @@ export class PanelAnimationWindow {
     this.window?.webContents.send(IPC_CHANNELS.panelAnimationReset);
   }
 
-  updateBounds(edge: AppConfig['layout']['edge'], panelWidth: number): void {
+  updateBounds(edge: AppConfig['layout']['edge'], panelWidth: number, displayId?: number): void {
     if (!this.window) {
       return;
     }
 
-    const dockBounds = getDockBounds(edge);
+    const dockBounds = getDockBounds(edge, displayId);
     this.window.setBounds(getPanelBounds(edge, dockBounds, panelWidth));
   }
 }

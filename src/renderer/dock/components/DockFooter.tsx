@@ -1,7 +1,6 @@
 interface DockFooterProps {
-  menuOpen: boolean;
   onShowAddSite: () => void;
-  onToggleMenu: () => void;
+  onOpenQuickMenu: () => void;
   onHideDock: () => void;
 }
 
@@ -12,9 +11,8 @@ const edgeButtonClassName =
   'flex h-[42px] w-11 items-center justify-center text-[26px] leading-none font-medium text-white/88 transition-colors hover:bg-white/8 hover:text-white';
 
 export function DockFooter({
-  menuOpen,
   onShowAddSite,
-  onToggleMenu,
+  onOpenQuickMenu,
   onHideDock
 }: DockFooterProps): JSX.Element {
   return (
@@ -32,9 +30,9 @@ export function DockFooter({
         </button>
         <button
           type="button"
-          className={`${buttonClassName} ${menuOpen ? 'bg-white/8 text-white' : ''}`}
+          className={buttonClassName}
           title="更多"
-          onClick={onToggleMenu}
+          onClick={onOpenQuickMenu}
         >
           <span aria-hidden="true">⋮</span>
         </button>

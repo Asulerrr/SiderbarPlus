@@ -17,6 +17,7 @@ const dockAPI: DockAPI = {
   openPanelContextMenu: (id) => ipcRenderer.invoke(IPC_CHANNELS.panelsContextMenu, { id }),
   hideToTray: () => ipcRenderer.invoke(IPC_CHANNELS.appHideToTray),
   toggleDockVisibility: () => ipcRenderer.invoke(IPC_CHANNELS.appToggleDockVisibility),
+  openQuickMenu: () => ipcRenderer.invoke(IPC_CHANNELS.appOpenQuickMenu),
   onPanelState: (callback) => {
     const listener = (_event: Electron.IpcRendererEvent, state: Parameters<typeof callback>[0]) => {
       callback(state);
