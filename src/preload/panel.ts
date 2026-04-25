@@ -3,6 +3,7 @@ import { IPC_CHANNELS, type PanelAPI } from '../shared/ipc-contracts';
 
 const panelAPI: PanelAPI = {
   readConfig: () => ipcRenderer.invoke(IPC_CHANNELS.configRead),
+  updateConfig: (patch) => ipcRenderer.invoke(IPC_CHANNELS.configUpdate, patch),
   addPanel: (payload) => ipcRenderer.invoke(IPC_CHANNELS.panelsAdd, payload),
   updatePanel: (payload) => ipcRenderer.invoke(IPC_CHANNELS.panelsUpdate, payload),
   listBrowsers: () => ipcRenderer.invoke(IPC_CHANNELS.browsersList),

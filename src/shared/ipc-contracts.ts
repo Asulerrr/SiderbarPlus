@@ -94,6 +94,7 @@ export interface DockAPI {
 
 export interface PanelAPI {
   readConfig: () => Promise<IpcResult<AppConfig>>;
+  updateConfig: (patch: Partial<AppConfig>) => Promise<IpcResult<AppConfig>>;
   addPanel: (payload: PanelCreatePayload) => Promise<IpcResult<AppConfig['panels'][number]>>;
   updatePanel: (payload: PanelUpdatePayload) => Promise<IpcResult<AppConfig['panels'][number]>>;
   listBrowsers: () => Promise<IpcResult<BrowserInfo[]>>;

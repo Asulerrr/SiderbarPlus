@@ -21,6 +21,7 @@ import type {
   SiteInfo
 } from '@shared/types';
 import { ResizeHandle } from './components/ResizeHandle';
+import { SettingsView } from './views/settings/SettingsView';
 
 const CONTENT_INSET = 8;
 const PANEL_TOP_INSET = 8;
@@ -824,7 +825,7 @@ export default function App(): JSX.Element {
                 </div>
               </div>
             ) : isSettingsPanel ? (
-              <div className="p-4 text-white">Settings (coming in next task)</div>
+              <SettingsView />
             ) : contentSnapshotDataUrl ? (
               <img
                 src={contentSnapshotDataUrl}
