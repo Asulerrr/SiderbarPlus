@@ -1,4 +1,5 @@
 import type { AutoLaunchService } from '../services/AutoLaunchService';
+import type { FullscreenWatcher } from '../services/FullscreenWatcher';
 import type { ConfigStore } from '../store/ConfigStore';
 import type { TrayManager } from '../tray/TrayManager';
 import type { WindowManager } from '../windows/WindowManager';
@@ -12,9 +13,10 @@ export const registerIpcHandlers = (
   configStore: ConfigStore,
   windowManager: WindowManager,
   trayManager: TrayManager,
-  autoLaunchService: AutoLaunchService
+  autoLaunchService: AutoLaunchService,
+  fullscreenWatcher: FullscreenWatcher
 ): void => {
-  registerConfigHandlers(configStore, autoLaunchService);
+  registerConfigHandlers(configStore, autoLaunchService, fullscreenWatcher);
   registerPanelHandlers(configStore, windowManager);
   registerAppHandlers(windowManager, trayManager);
   registerBrowserHandlers();

@@ -13,6 +13,8 @@ export class WindowManager {
   private panelAnimationWindow: PanelAnimationWindow | null = null;
   private panelMenuWindow: PanelMenuWindow | null = null;
   private panelManager: PanelManager | null = null;
+  // 进入全屏前 Dock 是否可见。用于退出全屏时正确恢复，避免覆盖用户主动 hide 的意图。
+  private dockVisibleBeforeFullscreen: boolean | null = null;
 
   constructor(
     private readonly config: AppConfig,
@@ -71,6 +73,28 @@ export class WindowManager {
   activateExistingInstance(): void {
     this.dockWindow?.show();
     this.dockWindow?.getBrowserWindow()?.moveTop();
+  }
+
+  /**
+   * PRD §5.9.4 全屏检测：检测到前台全屏时调用，hide Dock + Panel。
+   * 记录进入全屏前的可见状态，避免覆盖用户主动 hide。
+   */
+  hideForFullscreen(): void {
+    this.dockVisibleBeforeFullscreen = this.isDockVisible();
+    this.dockWindow?.hide();
+    this.panelWindow?.hide();
+    this.panelMenuWindow?.hide();
+  }
+
+  /**
+   * PRD §5.9.4：退出全屏后仅在用户进入全屏前 Dock 可见的情况下恢复显示。
+   * 面板不自动恢复（PRD 要求等用户下次悬停）。
+   */
+  restoreFromFullscreen(): void {
+    if (this.dockVisibleBeforeFullscreen) {
+      this.dockWindow?.show();
+    }
+    this.dockVisibleBeforeFullscreen = null;
   }
 
   toggleDockVisibility(): boolean {

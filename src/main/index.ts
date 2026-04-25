@@ -4,6 +4,7 @@ import { APP_ID, APP_NAME, APP_VERSION } from '../shared/constants';
 import type { PanelState } from '../shared/types';
 import { registerIpcHandlers } from './ipc';
 import { AutoLaunchService } from './services/AutoLaunchService';
+import { FullscreenWatcher } from './services/FullscreenWatcher';
 import { ConfigStore } from './store/ConfigStore';
 import { resetDevelopmentData } from './utils/devReset';
 import { TrayManager } from './tray/TrayManager';
@@ -44,6 +45,19 @@ const bootstrap = async (): Promise<void> => {
   windowManager = new WindowManager(config, configStore, emitPanelState);
   windowManager.createWindows();
 
+  // PRD §5.9.4 全屏检测：
+  // 把所有自身窗口的 native handle 加入排除集，避免 dock/panel 自身被误判为全屏
+  const fullscreenWatcher = new FullscreenWatcher(
+    () => windowManager?.hideForFullscreen(),
+    () => windowManager?.restoreFromFullscreen()
+  );
+  for (const win of BrowserWindow.getAllWindows()) {
+    fullscreenWatcher.excludeWindow(win.getNativeWindowHandle());
+  }
+  if (config.app.hideOnFullscreen) {
+    fullscreenWatcher.start();
+  }
+
   trayManager = new TrayManager({
     onToggleDock: () => windowManager?.toggleDockVisibility(),
     onShowDock: () => windowManager?.showDockFromTray(),
@@ -69,7 +83,13 @@ const bootstrap = async (): Promise<void> => {
   });
   trayManager.create();
 
-  registerIpcHandlers(configStore, windowManager, trayManager, autoLaunchService);
+  registerIpcHandlers(
+    configStore,
+    windowManager,
+    trayManager,
+    autoLaunchService,
+    fullscreenWatcher
+  );
 
   logger.info(`${APP_NAME} started`, { isAutoStart });
 };
