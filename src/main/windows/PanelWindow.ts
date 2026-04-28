@@ -2,12 +2,17 @@ import { BrowserWindow } from 'electron';
 import { join } from 'node:path';
 import type { AppConfig } from '../../shared/types';
 import { getDockBounds } from '../utils/display';
-import { getPanelBounds } from '../utils/panelBounds';
+import { type WindowBounds, getPanelBounds } from '../utils/panelBounds';
 
 export class PanelWindow {
   private window: BrowserWindow | null = null;
+  private lastPanelWidth: number;
+  private lastEdge: AppConfig['layout']['edge'];
 
-  constructor(private readonly config: AppConfig) {}
+  constructor(private config: AppConfig) {
+    this.lastPanelWidth = config.layout.panelDefaultWidth;
+    this.lastEdge = config.layout.edge;
+  }
 
   create(): BrowserWindow {
     const dockBounds = getDockBounds(this.config.layout.edge, this.config.layout.displayId);
@@ -67,6 +72,7 @@ export class PanelWindow {
   show(): void {
     this.window?.setAlwaysOnTop(true, 'screen-saver');
     this.window?.moveTop();
+    this.assertPosition();
     this.window?.showInactive();
   }
 
@@ -75,11 +81,17 @@ export class PanelWindow {
   }
 
   updateBounds(edge: AppConfig['layout']['edge'], panelWidth: number, displayId?: number): void {
-    if (!this.window) {
-      return;
-    }
-
+    this.lastPanelWidth = panelWidth;
+    this.lastEdge = edge;
+    if (!this.window) return;
     const dockBounds = getDockBounds(edge, displayId);
     this.window.setBounds(getPanelBounds(edge, dockBounds, panelWidth));
+  }
+
+  /** 用最后一次 updateBounds 的参数强制重设窗口位置（work area 收缩后防 Windows snap） */
+  assertPosition(): void {
+    if (!this.window || this.window.isDestroyed()) return;
+    const dockBounds = getDockBounds(this.lastEdge, this.config.layout.displayId);
+    this.window.setBounds(getPanelBounds(this.lastEdge, dockBounds, this.lastPanelWidth));
   }
 }

@@ -10,13 +10,12 @@ interface Props {
 
 export function Appearance({ config, updateConfig }: Props): JSX.Element {
   return (
-    <div className="space-y-1">
-      <h2 className="mb-3 text-base font-medium">外观</h2>
+    <div className="divide-y divide-white/5">
       <Radio<Edge>
         label="图标栏位置"
         options={[
           { value: 'left', label: '左' },
-          { value: 'right', label: '右' },
+          { value: 'right', label: '右' }
         ]}
         value={config.layout.edge}
         onChange={(v) => void updateConfig({ layout: { ...config.layout, edge: v } })}
@@ -38,7 +37,7 @@ export function Appearance({ config, updateConfig }: Props): JSX.Element {
           { value: 'system', label: '跟随系统' },
           { value: 'light', label: '浅色' },
           { value: 'dark', label: '深色' },
-          { value: 'custom', label: '自定义' },
+          { value: 'custom', label: '自定义' }
         ]}
         value={config.appearance.themeMode}
         onChange={(v) =>

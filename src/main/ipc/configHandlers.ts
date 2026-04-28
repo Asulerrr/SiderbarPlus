@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { BrowserWindow, ipcMain } from 'electron';
 import { IPC_CHANNELS } from '../../shared/ipc-contracts';
 import type { AppConfig, IpcResult } from '../../shared/types';
 import { logger } from '../utils/logger';
@@ -47,6 +47,9 @@ export const registerConfigHandlers = (
           } else {
             fullscreenWatcher.stop();
           }
+        }
+        for (const win of BrowserWindow.getAllWindows()) {
+          win.webContents.send(IPC_CHANNELS.configChanged, config);
         }
         return { ok: true, data: config };
       } catch (error) {

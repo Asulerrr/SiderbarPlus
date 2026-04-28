@@ -8,8 +8,7 @@ interface Props {
 
 export function General({ config, updateConfig }: Props): JSX.Element {
   return (
-    <div className="space-y-1">
-      <h2 className="mb-3 text-base font-medium">常规</h2>
+    <div className="divide-y divide-white/5">
       <Toggle
         label="开机自启"
         checked={config.app.autoLaunch}

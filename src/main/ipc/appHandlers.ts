@@ -1,5 +1,5 @@
-import { dialog, ipcMain, Menu, screen } from 'electron';
-import { APP_NAME, APP_VERSION, BUILTIN_SETTINGS_ID } from '../../shared/constants';
+import { ipcMain, Menu, screen } from 'electron';
+import { BUILTIN_ADD_SITE_ID, BUILTIN_SETTINGS_ID } from '../../shared/constants';
 import { IPC_CHANNELS } from '../../shared/ipc-contracts';
 import type { IpcResult } from '../../shared/types';
 import type { AutoLaunchService } from '../services/AutoLaunchService';
@@ -49,6 +49,20 @@ export const registerAppHandlers = (
     try {
       const config = await configStore.read();
       const dockWindow = windowManager.getDockWindow()?.getBrowserWindow() ?? undefined;
+      // 防御：dockWindow 隐藏状态下 menu.popup 在 Windows 上可能无法弹出
+      // 或弹出后无法接收点击。menu-will-close 也可能不触发，导致后续 ⋮ 无反应。
+      // 强制 dock 可见并取得焦点上下文。
+      if (dockWindow && !dockWindow.isVisible()) {
+        dockWindow.showInactive();
+      }
+
+      // dock 底部 + / 设置 与 ⋮ 互斥：add-site 或 settings 面板展开时点 ⋮
+      // 自动收起，让用户与 quick menu 交互前有干净的视觉状态。
+      const activeId = windowManager.getActivePanelId();
+      if (activeId === BUILTIN_ADD_SITE_ID || activeId === BUILTIN_SETTINGS_ID) {
+        await windowManager.hidePanel(true);
+      }
+
       const displays = screen.getAllDisplays();
 
       const menu = Menu.buildFromTemplate([
@@ -115,16 +129,22 @@ export const registerAppHandlers = (
         {
           label: '关于',
           click: () => {
-            void dialog.showMessageBox({
-              type: 'info',
-              title: APP_NAME,
-              message: `${APP_NAME} ${APP_VERSION}`,
-              detail: 'M2 阶段占位入口，完整关于与检查更新将在后续阶段实现。'
-            });
+            void windowManager.showPanel(BUILTIN_SETTINGS_ID, true);
           }
         }
       ]);
 
+      // 冻结 panel 隐藏逻辑：原生菜单没有 BrowserWindow，几何检测会把菜单
+      // 区误判为 dock 外，导致 add-site 等悬停面板在菜单展开期间被关闭，
+      // 用户从菜单移出时鼠标若掠过 '+' 又会触发重开 → 视觉为闪烁。
+      // 用带过期时间的静默窗口而非 boolean lock：menu-will-close 即便没触发，
+      // 5s 后也会自动恢复，不会让面板永远停在不可隐藏状态。
+      windowManager.muteHide(5000);
+      menu.once('menu-will-close', () => {
+        // 菜单关闭时立即清除静默；showPanel 已在选中"设置"等项时同步置 sticky=true，
+        // 不存在竞态。
+        windowManager.clearHideMute();
+      });
       menu.popup({ window: dockWindow });
       return { ok: true, data: undefined };
     } catch (error) {

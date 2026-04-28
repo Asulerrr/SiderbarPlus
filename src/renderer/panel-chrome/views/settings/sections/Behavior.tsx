@@ -9,8 +9,7 @@ interface Props {
 
 export function Behavior({ config, updateConfig }: Props): JSX.Element {
   return (
-    <div className="space-y-1">
-      <h2 className="mb-3 text-base font-medium">行为</h2>
+    <div className="divide-y divide-white/5">
       <Slider
         label="悬停触发延迟"
         min={100}

@@ -22,6 +22,14 @@ import type {
   SiteInfo
 } from './types';
 
+export interface UpdateCheckResult {
+  current: string;
+  latest: string | null;
+  status: 'up-to-date' | 'available' | 'no-remote' | 'error';
+  url?: string;
+  error?: string;
+}
+
 export const IPC_CHANNELS = {
   configRead: 'config:read',
   configUpdate: 'config:update',
@@ -56,6 +64,7 @@ export const IPC_CHANNELS = {
   appCycleDisplay: 'app:cycle-display',
   panelState: 'panel:state',
   panelsUpdated: 'panels:updated',
+  configChanged: 'config:changed',
   panelPrepareClose: 'panel:prepare-close',
   panelAnimateIn: 'panel:animate-in',
   panelAnimateOut: 'panel:animate-out',
@@ -96,6 +105,7 @@ export interface DockAPI {
   openQuickMenu: () => Promise<IpcResult<void>>;
   onPanelState: (callback: (state: PanelState) => void) => () => void;
   onPanelsUpdated: (callback: (payload: PanelsUpdatedPayload) => void) => () => void;
+  onConfigChanged: (callback: (config: AppConfig) => void) => () => void;
 }
 
 export interface PanelAPI {
@@ -126,6 +136,7 @@ export interface PanelAPI {
   onChromeFadeIn: (callback: (payload: PanelChromePayload) => void) => () => void;
   onNavigationState: (callback: (payload: PanelNavigationPayload) => void) => () => void;
   onPanelState: (callback: (state: PanelState) => void) => () => void;
+  onConfigChanged: (callback: (config: AppConfig) => void) => () => void;
   togglePin: () => Promise<IpcResult<void>>;
   commitResize: (width: number) => Promise<IpcResult<void>>;
   resizeDrag: (width: number) => void;
@@ -133,7 +144,7 @@ export interface PanelAPI {
   exportConfig: () => Promise<IpcResult<{ canceled: boolean; path?: string }>>;
   importConfig: () => Promise<IpcResult<{ canceled: boolean; restartRequired: boolean }>>;
   clearStorageData: () => Promise<IpcResult<void>>;
-  checkUpdate: () => Promise<IpcResult<{ status: 'placeholder' }>>;
+  checkUpdate: () => Promise<IpcResult<UpdateCheckResult>>;
   quitApp: () => Promise<IpcResult<void>>;
 }
 
@@ -142,9 +153,11 @@ export interface BuiltinAPI {
 }
 
 export interface PanelAnimationAPI {
+  readConfig: () => Promise<IpcResult<AppConfig>>;
   onOpen: (callback: (payload: PanelAnimationPayload) => void) => () => void;
   onClose: (callback: (payload: PanelAnimationPayload) => void) => () => void;
   onReset: (callback: () => void) => () => void;
+  onConfigChanged: (callback: (config: AppConfig) => void) => () => void;
 }
 
 export interface PanelMenuAPI {

@@ -7,9 +7,10 @@ import {
   PinOff,
   X
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { PANEL_DEFAULT_WIDTH } from '@shared/constants';
 import { toRenderableIconUrl } from '@shared/iconUrl';
+import { resolveSurfaceColors } from '@shared/theme';
 import type {
   AppConfig,
   BrowserInfo,
@@ -136,6 +137,13 @@ export default function App(): JSX.Element {
   const hydrationTokenRef = useRef(0);
   const panelCardRadius = chromeState.edge === 'right' ? 'rounded-l-lg' : 'rounded-r-lg';
   const panelCardBorder = chromeState.edge === 'right' ? 'border-r-0' : 'border-l-0';
+  const surface = useMemo(
+    () =>
+      config
+        ? resolveSurfaceColors(config.appearance, true)
+        : { bg: '#1b1b1b', fg: '#FFFFFFE6' },
+    [config]
+  );
 
   const loadConfig = async (): Promise<AppConfig | null> => {
     const result = await window.panelAPI.readConfig();
@@ -310,6 +318,12 @@ export default function App(): JSX.Element {
       );
     });
 
+    const disposeConfigChanged = window.panelAPI.onConfigChanged((nextConfig) => {
+      if (mounted) {
+        setConfig(nextConfig);
+      }
+    });
+
     return () => {
       mounted = false;
       disposePrepareClose();
@@ -319,6 +333,7 @@ export default function App(): JSX.Element {
       disposeFadeIn();
       disposeNavigation();
       disposePanelState();
+      disposeConfigChanged();
     };
   }, []);
 
@@ -518,7 +533,10 @@ export default function App(): JSX.Element {
         void window.panelAPI.scheduleHide();
       }}
     >
-      <div className="panel-shell absolute inset-0 overflow-hidden bg-[#1b1b1b] text-white">
+      <div
+        className="panel-shell absolute inset-0 overflow-hidden text-white"
+        style={{ backgroundColor: surface.bg }}
+      >
         <ResizeHandle edge={chromeState.edge} />
         <div
           className={`absolute flex flex-col overflow-hidden border border-white/6 bg-[#202020] shadow-[0_0_0_1px_rgba(0,0,0,0.18)] ${panelCardRadius} ${panelCardBorder}`}
@@ -618,10 +636,19 @@ export default function App(): JSX.Element {
           <div className="relative flex-1 overflow-hidden bg-[#242424]">
             {isSiteFormPanel ? (
               <div className="absolute inset-0 flex flex-col bg-[#111111]">
-                <div className="min-h-0 flex-1 overflow-y-auto px-[22px] py-6">
-                  <div className="flex flex-col gap-4">
-                    <section className="rounded-xl border border-white/9 bg-[#191919] px-5 py-5 shadow-[0_16px_42px_rgba(0,0,0,0.24)]">
-                      <label className="mb-3 block text-sm font-semibold text-white/58">网址</label>
+                <div className="min-h-0 flex-1 overflow-y-auto px-8 pb-8 pt-7">
+                  <div className="mb-7 flex items-baseline gap-3 animate-fade-up">
+                    <span className="font-mono text-[10px] tracking-[0.22em] text-white/30">
+                      {isEditSitePanel ? 'EDIT' : 'NEW'}
+                    </span>
+                    <h2 className="heading-rule font-display text-[15px] uppercase">
+                      {isEditSitePanel ? '编辑站点' : '添加网站'}
+                    </h2>
+                  </div>
+
+                  <div className="flex flex-col gap-7 animate-fade-up [animation-delay:60ms]">
+                    <div>
+                      <label className="field-label mb-2.5">网址</label>
                       <input
                         value={addSiteUrl}
                         onChange={(event) => {
@@ -631,19 +658,24 @@ export default function App(): JSX.Element {
                           }
                         }}
                         placeholder="例如 github.com 或 https://example.com"
-                        className="h-11 w-full rounded-lg border border-white/10 bg-[#242424] px-4 text-[15px] font-semibold text-white outline-none transition-colors placeholder:text-white/24 focus:border-white/22"
+                        className="input-amber h-11 w-full border border-white/10 bg-transparent px-3 font-mono text-[14px] text-white outline-none transition-colors placeholder:font-body placeholder:text-[13px] placeholder:tracking-cn placeholder:text-white/30"
                       />
                       {addSiteError ? (
-                        <div className="mt-3 text-sm text-[#ff9d9d]">{addSiteError}</div>
+                        <div className="mt-2.5 flex items-center gap-2 text-[12px] tracking-cn text-[#ff9d9d]">
+                          <span className="font-mono text-[10px]">!</span>
+                          {addSiteError}
+                        </div>
                       ) : null}
-                    </section>
+                    </div>
 
-                    <section className="rounded-xl border border-white/9 bg-[#191919] px-5 py-5 shadow-[0_16px_42px_rgba(0,0,0,0.2)]">
-                      <div className="mb-4 text-sm font-semibold text-white/58">图标预览</div>
-                      <div className="flex min-h-[132px] items-center gap-5 rounded-xl border border-dashed border-white/14 bg-[#181818] px-6 py-5">
+                    <div>
+                      <div className="field-label mb-3">图标预览</div>
+                      <div className="dot-grid flex min-h-[120px] items-center gap-5 border border-white/8 bg-[#0d0d0d] px-5 py-5">
                         <div
-                          className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-[#282828] text-3xl font-semibold text-white/80 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]"
-                          style={{ backgroundColor: customIconPath ? undefined : previewColor }}
+                          className="flex h-[72px] w-[72px] shrink-0 items-center justify-center overflow-hidden border border-white/10 bg-[#1a1a1a] font-display text-[28px] font-semibold text-white/85"
+                          style={{
+                            backgroundColor: customIconPath || autoFavicon ? undefined : previewColor
+                          }}
                         >
                           {customIconPath ? (
                             <img
@@ -663,80 +695,98 @@ export default function App(): JSX.Element {
                         </div>
 
                         <div className="min-w-0 flex-1">
-                          <div className="mb-4 truncate text-sm font-semibold text-white/48">
-                            {customIconPath
-                              ? '正在使用自定义图标'
-                              : faviconLoading
-                                ? '正在自动获取站点图标...'
-                                : autoFavicon
-                                  ? '已自动获取站点图标'
-                                  : faviconError
-                                    ? '自动获取失败，将使用字母图标'
-                                    : '输入网址后自动获取站点图标'}
+                          <div className="mb-3 flex items-center gap-2">
+                            <span
+                              className={`h-1.5 w-1.5 rounded-full ${
+                                faviconLoading
+                                  ? 'animate-pulse bg-amber'
+                                  : customIconPath || autoFavicon
+                                    ? 'bg-amber'
+                                    : faviconError
+                                      ? 'bg-[#ff9d9d]'
+                                      : 'bg-white/25'
+                              }`}
+                            />
+                            <span className="truncate text-[12px] tracking-cn text-white/55">
+                              {customIconPath
+                                ? '使用自定义图标'
+                                : faviconLoading
+                                  ? '正在获取站点图标…'
+                                  : autoFavicon
+                                    ? '已自动获取站点图标'
+                                    : faviconError
+                                      ? '获取失败，使用字母图标'
+                                      : '输入网址后自动获取'}
+                            </span>
                           </div>
                           <div className="flex flex-wrap gap-2">
                             <button
                               type="button"
-                              className="h-10 rounded-lg border border-white/12 bg-[#272727] px-4 text-sm font-semibold text-white/82 transition-colors hover:bg-[#303030]"
+                              className="border border-white/12 bg-transparent px-3 py-1.5 text-[12px] tracking-cn text-white/75 transition-colors hover:border-amber/60 hover:text-amber"
                               onClick={() => void handlePickCustomIcon()}
                             >
-                              手动选择图标
+                              手动选择
                             </button>
-                            <button
-                              type="button"
-                              className="h-10 rounded-lg border border-white/12 bg-[#272727] px-4 text-sm font-semibold text-white/68 transition-colors hover:bg-[#303030] hover:text-white/86"
-                              onClick={() => setCustomIconPath(null)}
-                            >
-                              清除自定义
-                            </button>
+                            {customIconPath ? (
+                              <button
+                                type="button"
+                                className="border border-white/12 bg-transparent px-3 py-1.5 text-[12px] tracking-cn text-white/55 transition-colors hover:border-white/30 hover:text-white/80"
+                                onClick={() => setCustomIconPath(null)}
+                              >
+                                清除
+                              </button>
+                            ) : null}
                           </div>
                         </div>
                       </div>
-                    </section>
+                    </div>
 
-                    <section className="rounded-xl border border-white/9 bg-[#191919] px-5 py-5 shadow-[0_16px_42px_rgba(0,0,0,0.2)]">
-                      <label className="mb-3 block text-sm font-semibold text-white/58">
-                        打开方式 <span className="text-white/38">(1.0 点位)</span>
-                      </label>
+                    <div>
+                      <label className="field-label mb-2.5">打开方式</label>
                       <select
                         value={selectedBrowserId}
                         onChange={(event) => setSelectedBrowserId(event.target.value)}
-                        className="h-11 w-full rounded-lg border border-white/10 bg-[#242424] px-4 text-[15px] font-semibold text-white outline-none"
+                        className="input-amber h-11 w-full border border-white/10 bg-transparent px-3 text-[13px] tracking-cn text-white outline-none transition-colors"
                       >
                         {browsers.map((browser) => (
-                          <option key={browser.id} value={browser.id}>
+                          <option key={browser.id} value={browser.id} className="bg-[#1a1a1a]">
                             {browser.name}
                           </option>
                         ))}
                       </select>
-                      <p className="mt-3 text-sm font-semibold leading-5 text-white/34">
-                        站内链接继续在侧边栏中打开，外开按钮会使用这里选择的浏览器。
+                      <p className="mt-2.5 border-l-2 border-white/10 pl-3 text-[12px] leading-relaxed tracking-cn text-white/45">
+                        站内链接继续在侧边栏中打开。外开按钮会使用这里选择的浏览器。
                       </p>
-                    </section>
+                    </div>
                   </div>
                 </div>
 
-                <div className="flex h-[88px] shrink-0 items-center justify-between border-t border-white/7 bg-[#191919] px-[24px]">
+                <div className="flex h-[80px] shrink-0 items-center justify-between border-t border-white/6 bg-[#0d0d0d] px-8">
                   <button
                     type="button"
-                    className="h-10 rounded-lg px-1 text-sm font-semibold text-white/58 transition-colors hover:text-white/82"
+                    className="ghost-link px-1 py-1 text-[12px] tracking-cn text-white/55 transition-colors hover:text-white"
                     onClick={() => void window.panelAPI.closePanel()}
                   >
                     取消
                   </button>
                   <button
                     type="button"
-                    className="h-10 min-w-[148px] rounded-xl bg-[#31598c] px-5 text-sm font-semibold text-white/82 transition-colors hover:bg-[#3b67a0] disabled:cursor-not-allowed disabled:bg-[#253c5d] disabled:text-white/38"
+                    className="group inline-flex items-center gap-2 border border-amber/55 bg-transparent px-6 py-2.5 text-[12px] font-semibold tracking-cn text-amber transition-colors hover:bg-amber hover:text-black disabled:cursor-not-allowed disabled:border-white/15 disabled:bg-transparent disabled:text-white/35"
                     disabled={submittingSite || !addSiteUrl.trim()}
                     onClick={() => void handleSubmitSite()}
                   >
-                    {submittingSite
-                      ? isEditSitePanel
-                        ? '更新中...'
-                        : '添加中...'
-                      : isEditSitePanel
-                        ? '更新站点'
-                        : '添加到侧边栏'}
+                    <span>
+                      {submittingSite
+                        ? isEditSitePanel
+                          ? '更新中…'
+                          : '添加中…'
+                        : isEditSitePanel
+                          ? '更新站点'
+                          : '添加到侧边栏'}
+                    </span>
+                    <span className="font-mono text-[10px] transition-transform group-enabled:group-hover:translate-x-0.5">
+                      →
+                    </span>
                   </button>
                 </div>
               </div>

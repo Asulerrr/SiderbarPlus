@@ -24,19 +24,22 @@ export function ColorAlphaPicker({ label, value, onChange }: Props): JSX.Element
   };
 
   return (
-    <div className="py-2">
-      <div className="mb-2 text-sm">{label}</div>
+    <div className="py-2.5">
+      <div className="mb-2.5 text-[13px] tracking-cn text-white/82">{label}</div>
       <div className="flex items-center gap-3">
         <input
           type="color"
           value={rgbHex}
           onChange={(e) => updateRgb(e.target.value)}
-          className="h-9 w-14 cursor-pointer rounded border border-white/15 bg-transparent"
+          className="h-10 w-12 cursor-pointer rounded-sm border border-white/15 bg-transparent"
         />
         <div className="flex-1">
-          <div className="mb-1 flex items-center justify-between text-xs text-white/70">
-            <span>不透明度</span>
-            <span>{alphaPercent}%</span>
+          <div className="mb-1.5 flex items-baseline justify-between">
+            <span className="text-[11px] tracking-cn text-white/42">不透明度</span>
+            <span className="font-mono text-[12px] text-amber">
+              {alphaPercent}
+              <span className="text-white/40">%</span>
+            </span>
           </div>
           <input
             type="range"
@@ -44,11 +47,13 @@ export function ColorAlphaPicker({ label, value, onChange }: Props): JSX.Element
             max={100}
             value={alphaPercent}
             onChange={(e) => updateAlpha(Number(e.target.value))}
-            className="w-full accent-accent"
+            className="slider-amber w-full"
           />
         </div>
       </div>
-      <div className="mt-2 text-xs text-white/50">{value}</div>
+      <div className="mt-2.5 font-mono text-[11px] tracking-wider text-white/35">
+        {value}
+      </div>
     </div>
   );
 }

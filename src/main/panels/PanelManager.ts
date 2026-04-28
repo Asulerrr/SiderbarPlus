@@ -49,6 +49,11 @@ export class PanelManager {
   private lifecycleToken = 0;
   private switchToken = 0;
   private sticky = false;
+  // dock 底部 ⋮ 弹出原生 Menu.popup 期间冻结隐藏逻辑。原生菜单没有 BrowserWindow，
+  // isCursorInsideInteractiveArea 的几何检测会把它判为"光标已离开 dock"。
+  // 用过期时间戳代替 boolean lock：menu-will-close 万一没触发也会自动恢复，
+  // 不会有"锁永远卡住"的副作用。
+  private hideMutedUntilMs = 0;
   private panelMode: 'hover' | 'pinned' = 'hover';
   private edge: Edge = 'right';
   private displayId: number | undefined = undefined;
@@ -57,15 +62,19 @@ export class PanelManager {
   private lastResizeDragWidth: number | null = null;
   private readonly snapshots = new Map<string, string>();
 
+  private readonly dockWindowRef: BrowserWindow;
+
   constructor(
     private readonly configStore: ConfigStore,
     panelWindow: PanelWindow,
     animationWindow: PanelAnimationWindow,
     private readonly menuWindow: PanelMenuWindow,
-    private readonly emitPanelState: (state: PanelState) => void
+    private readonly emitPanelState: (state: PanelState) => void,
+    dockBrowserWindow: BrowserWindow
   ) {
     this.panelWindow = panelWindow;
     this.animationWindow = animationWindow;
+    this.dockWindowRef = dockBrowserWindow;
     const browserWindow = panelWindow.getBrowserWindow();
     const animationBrowserWindow = animationWindow.getBrowserWindow();
     if (!browserWindow) {
@@ -154,6 +163,53 @@ export class PanelManager {
     this.cancelCloseTimer();
     this.state = 'open';
     this.emitState(config.layout.edge, this.panelMode);
+
+    // settings 等模态 builtin 面板需要点击外部自动收起。让 panel window 取焦点，
+    // 这样用户点桌面/其它应用时会触发 blur 事件，被 handlePanelBlur 捕获。
+    if (panelId === BUILTIN_SETTINGS_ID) {
+      this.panelWindowRef.focus();
+    }
+  }
+
+  /**
+   * panel window 失焦回调（由 WindowManager 的 'blur' 监听器调用）。
+   * 仅对 settings 面板生效——其它面板（hover web、add-site 等）按 PRD 走自己的关闭路径。
+   * 用 setTimeout 延后判断焦点目标：用户点 dock 图标会让 dockWindow 取焦点并触发
+   * switchPanel，此时不应误关。判断条件：
+   *   - 50ms 后没有任何"我们的"窗口取得焦点（focus 转到桌面 / 别的应用）
+   *   - 且当前面板仍是 settings（switch 没把它换掉）
+   */
+  handlePanelBlur(): void {
+    if (this.currentPanelId !== BUILTIN_SETTINGS_ID) {
+      return;
+    }
+    setTimeout(() => {
+      if (BrowserWindow.getFocusedWindow()) {
+        return;
+      }
+      if (this.currentPanelId === BUILTIN_SETTINGS_ID && this.state === 'open') {
+        void this.hidePanel(true);
+      }
+    }, 50);
+  }
+
+  /**
+   * dock 底部 ⋮ / 其它需要短暂冻结 hide 的入口调用。durationMs 默认 5s 兜底，
+   * 真正取消由 clearHideMute 在事件结束时显式调用。即便 caller 漏调，5s 后
+   * 自动恢复，避免锁永久卡住。
+   */
+  muteHide(durationMs = 5000): void {
+    this.hideMutedUntilMs = Date.now() + durationMs;
+    this.cancelCloseTimer();
+    this.pointerOutsideSince = null;
+  }
+
+  clearHideMute(): void {
+    this.hideMutedUntilMs = 0;
+  }
+
+  private isHideMuted(): boolean {
+    return Date.now() < this.hideMutedUntilMs;
   }
 
   scheduleHide(destroy = false): void {
@@ -161,7 +217,7 @@ export class PanelManager {
     void this.configStore.read().then((config) => {
       void this.webPanelHost.refreshConfig();
       this.applyHoverConfig(config);
-      if (this.sticky || this.panelMode === 'pinned') {
+      if (this.sticky || this.panelMode === 'pinned' || this.isHideMuted()) {
         return;
       }
 
@@ -499,13 +555,10 @@ export class PanelManager {
       return;
     }
 
-    const oldView = this.webPanelHost.getView(this.currentPanelId);
-    if (oldView) {
-      oldView.setBounds({ x: 0, y: 0, width: 0, height: 0 });
-    }
-
     this.attachDescriptorView(descriptor, edge);
-    this.webPanelHost.applyMuteState(descriptor.id, false);
+    if (descriptor.type === 'web') {
+      this.webPanelHost.applyMuteState(descriptor.id, false);
+    }
 
     this.panelWindowRef.webContents.send(IPC_CHANNELS.chromeFadeIn, {
       descriptor,
@@ -515,6 +568,11 @@ export class PanelManager {
 
     this.currentPanelId = descriptor.id;
     this.state = 'open';
+
+    // 同 showPanel：settings 面板需要取焦点以支持点击外部自动收起。
+    if (descriptor.id === BUILTIN_SETTINGS_ID) {
+      this.panelWindowRef.focus();
+    }
   }
 
   private applyHoverConfig(config: AppConfig): void {
@@ -559,7 +617,7 @@ export class PanelManager {
       return;
     }
 
-    if (this.sticky || this.panelMode === 'pinned') {
+    if (this.sticky || this.panelMode === 'pinned' || this.isHideMuted()) {
       this.pointerOutsideSince = null;
       return;
     }
@@ -608,19 +666,32 @@ export class PanelManager {
 
   private attachDescriptorView(descriptor: PanelDescriptor, edge: Edge): void {
     if (descriptor.type !== 'web') {
+      // 切到 builtin 面板时，确保 contentView 里没有任何残留的 web view，
+      // 否则它仍会以最后一次的 z-order / bounds 露出。
+      this.setActiveView(null);
       return;
     }
 
     const view = this.webPanelHost.getOrCreateView(descriptor);
-    this.attachView(view);
+    this.setActiveView(view);
     this.updateViewBounds(view, edge);
     this.bindViewEvents(descriptor, view);
     this.webPanelHost.applyMuteState(descriptor.id, false);
   }
 
-  private attachView(view: WebContentsView): void {
+  /**
+   * 任意时刻 panelWindow.contentView 内只保留一个目标 view（或 null）。
+   * 旧实现仅把旧 view 缩到 0×0 但不卸载，多次切换后 children 数组会累积，
+   * z-order 由历史 add 顺序决定，偶发让"应该看不见"的视图露出。
+   */
+  private setActiveView(view: WebContentsView | null): void {
     const contentView = this.panelWindowRef.contentView;
-    if (!contentView.children.includes(view)) {
+    for (const child of [...contentView.children]) {
+      if (child !== view) {
+        contentView.removeChildView(child);
+      }
+    }
+    if (view && !contentView.children.includes(view)) {
       contentView.addChildView(view);
     }
   }
@@ -674,6 +745,7 @@ export class PanelManager {
   private sendAnimationOpen(descriptor: PanelDescriptor, edge: Edge, snapshotDataUrl: string | null): void {
     this.animationWindowRef.setAlwaysOnTop(true, 'screen-saver');
     this.animationWindowRef.moveTop();
+    this.dockWindowRef.moveTop();
     this.animationWindowRef.webContents.send(IPC_CHANNELS.panelAnimationOpen, {
       panelId: descriptor.id,
       descriptor,
@@ -712,6 +784,8 @@ export class PanelManager {
     this.panelWindowRef.setAlwaysOnTop(true, 'screen-saver');
     this.animationWindowRef.moveTop();
     this.panelWindowRef.moveTop();
+    // 把 dock 抬回最上层——panel/animation 动画不应遮盖 dock
+    this.dockWindowRef.moveTop();
   }
 
   private async captureViewSnapshot(view: WebContentsView | null): Promise<string | null> {

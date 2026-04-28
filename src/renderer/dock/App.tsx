@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { BUILTIN_ADD_SITE_ID } from '@shared/constants';
 import { shouldShowDockActiveIndicator } from '@shared/dockLayout';
+import { resolveSurfaceColors } from '@shared/theme';
 import type { AppConfig, PanelDescriptor, PanelState } from '@shared/types';
 import { DockFooter } from './components/DockFooter';
 import { DockIconList } from './components/DockIconList';
@@ -48,6 +49,12 @@ export default function App(): JSX.Element {
       }
     });
 
+    const disposeConfigChanged = window.dockAPI.onConfigChanged((nextConfig) => {
+      if (mounted) {
+        setConfig(nextConfig);
+      }
+    });
+
     const disposePanelsUpdated = window.dockAPI.onPanelsUpdated((payload) => {
       if (!mounted) {
         return;
@@ -68,6 +75,7 @@ export default function App(): JSX.Element {
     return () => {
       mounted = false;
       disposePanelState();
+      disposeConfigChanged();
       disposePanelsUpdated();
       if (hoverTimerRef.current) {
         window.clearTimeout(hoverTimerRef.current);
@@ -142,6 +150,13 @@ export default function App(): JSX.Element {
 
   // panelState.edge 由 main 实时推送，是权威来源；config 只用作首屏兜底（IPC 推送前）
   const edge = panelState.edge ?? config?.layout.edge ?? 'right';
+  const surface = useMemo(
+    () =>
+      config
+        ? resolveSurfaceColors(config.appearance, true)
+        : { bg: '#1F1F1F', fg: '#FFFFFFE6' },
+    [config]
+  );
   const activeIndicatorPanelId = shouldShowDockActiveIndicator(panelState)
     ? panelState.activePanelId
     : null;
@@ -149,7 +164,8 @@ export default function App(): JSX.Element {
   return (
     <main
       ref={rootRef}
-      className="relative h-screen w-[44px] bg-dock text-white"
+      className="relative h-screen w-[44px] text-white"
+      style={{ backgroundColor: surface.bg, color: surface.fg }}
       onMouseEnter={() => {
         void window.dockAPI.cancelHide();
       }}

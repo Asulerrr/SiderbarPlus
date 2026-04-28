@@ -72,6 +72,14 @@ const panelAPI: PanelAPI = {
     ipcRenderer.on(IPC_CHANNELS.panelState, listener);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.panelState, listener);
   },
+  onConfigChanged: (callback) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      config: Parameters<typeof callback>[0]
+    ) => callback(config);
+    ipcRenderer.on(IPC_CHANNELS.configChanged, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.configChanged, listener);
+  },
   togglePin: () => ipcRenderer.invoke(IPC_CHANNELS.panelTogglePin),
   commitResize: (width) => ipcRenderer.invoke(IPC_CHANNELS.panelCommitResize, width),
   resizeDrag: (width) => {

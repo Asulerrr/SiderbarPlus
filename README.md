@@ -10,6 +10,9 @@ Electron-based Windows sidebar app scaffolded from the product PRD.
 - `M4`: completed
 - `M5`: completed
 - `M6`: completed
+- `M7`: completed (auto-launch, single-instance lock, fullscreen detect, left/right edge switch)
+- `M8`: completed (settings panel UI, import/export, clear storage, GitHub-tag update check)
+- `M9`: in progress (electron-builder configured; pending icon.ico + first-run polish)
 
 ## Development
 

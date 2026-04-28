@@ -1,6 +1,7 @@
 import { ExternalLink, Minus, MoreHorizontal, PinOff, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
-import type { PanelAnimationPayload } from '@shared/types';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { resolveSurfaceColors } from '@shared/theme';
+import type { AppConfig, PanelAnimationPayload } from '@shared/types';
 
 const CONTENT_INSET = 8;
 const PANEL_TOP_INSET = 8;
@@ -15,7 +16,24 @@ export default function App(): JSX.Element {
   const [payload, setPayload] = useState<PanelAnimationPayload | null>(null);
   const [phase, setPhase] = useState<AnimationPhase>('closed');
   const [direction, setDirection] = useState<Direction>('opening');
+  const [config, setConfig] = useState<AppConfig | null>(null);
   const timersRef = useRef<number[]>([]);
+
+  useEffect(() => {
+    let mounted = true;
+    void window.panelAnimationAPI.readConfig().then((result) => {
+      if (mounted && result.ok) {
+        setConfig(result.data);
+      }
+    });
+    const dispose = window.panelAnimationAPI.onConfigChanged((next) => {
+      if (mounted) setConfig(next);
+    });
+    return () => {
+      mounted = false;
+      dispose();
+    };
+  }, []);
 
   useEffect(() => {
     const clearTimers = (): void => {
@@ -80,6 +98,13 @@ export default function App(): JSX.Element {
   }, []);
 
   const edge = payload?.edge ?? 'right';
+  const surface = useMemo(
+    () =>
+      config
+        ? resolveSurfaceColors(config.appearance, true)
+        : { bg: '#1b1b1b', fg: '#FFFFFFE6' },
+    [config]
+  );
   const panelCardRadius = edge === 'right' ? 'rounded-l-lg' : 'rounded-r-lg';
   const panelCardBorder = edge === 'right' ? 'border-r-0' : 'border-l-0';
   const closedTransform =
@@ -96,8 +121,8 @@ export default function App(): JSX.Element {
   return (
     <main className="relative h-screen w-full bg-transparent">
       <div
-        className="panel-animation-shell absolute inset-0 overflow-hidden bg-[#1b1b1b] text-white"
-        style={{ transform, transition }}
+        className="panel-animation-shell absolute inset-0 overflow-hidden text-white"
+        style={{ transform, transition, backgroundColor: surface.bg }}
       >
         <div
           className={`absolute flex flex-col overflow-hidden border border-white/6 bg-[#202020] shadow-[0_0_0_1px_rgba(0,0,0,0.18)] ${panelCardRadius} ${panelCardBorder}`}

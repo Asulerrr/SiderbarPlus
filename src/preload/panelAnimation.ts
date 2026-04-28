@@ -2,6 +2,15 @@ import { contextBridge, ipcRenderer } from 'electron';
 import { IPC_CHANNELS, type PanelAnimationAPI } from '../shared/ipc-contracts';
 
 const panelAnimationAPI: PanelAnimationAPI = {
+  readConfig: () => ipcRenderer.invoke(IPC_CHANNELS.configRead),
+  onConfigChanged: (callback) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      config: Parameters<typeof callback>[0]
+    ) => callback(config);
+    ipcRenderer.on(IPC_CHANNELS.configChanged, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.configChanged, listener);
+  },
   onOpen: (callback) => {
     const listener = (
       _event: Electron.IpcRendererEvent,

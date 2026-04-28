@@ -39,6 +39,15 @@ const dockAPI: DockAPI = {
     return () => {
       ipcRenderer.removeListener(IPC_CHANNELS.panelsUpdated, listener);
     };
+  },
+  onConfigChanged: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, config: Parameters<typeof callback>[0]) => {
+      callback(config);
+    };
+    ipcRenderer.on(IPC_CHANNELS.configChanged, listener);
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.configChanged, listener);
+    };
   }
 };
 

@@ -1,6 +1,6 @@
-import { app, BrowserWindow, dialog } from 'electron';
+import { app, BrowserWindow } from 'electron';
 import { join } from 'node:path';
-import { APP_ID, APP_NAME, APP_VERSION } from '../shared/constants';
+import { APP_ID, APP_NAME, BUILTIN_SETTINGS_ID } from '../shared/constants';
 import type { PanelState } from '../shared/types';
 import { registerIpcHandlers } from './ipc';
 import { AutoLaunchService } from './services/AutoLaunchService';
@@ -63,22 +63,15 @@ const bootstrap = async (): Promise<void> => {
     onShowDock: () => windowManager?.showDockFromTray(),
     onHideDock: () => windowManager?.hideDockToTray(),
     onOpenSettings: () => {
-      void dialog.showMessageBox({
-        type: 'info',
-        title: '设置',
-        message: '设置面板将在 M8 实现。',
-        detail: 'M2 阶段先保留托盘入口。'
-      });
+      void windowManager?.showPanel(BUILTIN_SETTINGS_ID, true);
     },
     onOpenAbout: () => {
-      void dialog.showMessageBox({
-        type: 'info',
-        title: APP_NAME,
-        message: `${APP_NAME} ${APP_VERSION}`,
-        detail: 'M2 阶段占位入口，完整关于与检查更新将在后续阶段实现。'
-      });
+      void windowManager?.showPanel(BUILTIN_SETTINGS_ID, true);
     },
-    onQuit: () => app.quit(),
+    onQuit: () => {
+      windowManager?.disposeAppBar();
+      app.quit();
+    },
     isDockVisible: () => windowManager?.isDockVisible() ?? false
   });
   trayManager.create();
@@ -119,4 +112,10 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
+});
+
+// 退出前注销 AppBar，否则 Windows work area 会临时残留缩小，
+// 直到系统下次重算（其他 app 最大化时才恢复）。
+app.on('before-quit', () => {
+  windowManager?.disposeAppBar();
 });

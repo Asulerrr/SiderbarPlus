@@ -54,14 +54,12 @@ export function DockItem({
   onContextMenu
 }: DockItemProps): JSX.Element {
   const [iconFailed, setIconFailed] = useState(false);
-  const [iconLoaded, setIconLoaded] = useState(false);
   const iconSrc = buildIconSrc(panel);
   const activeIndicatorSide = getDockActiveIndicatorSide(edge);
 
   useEffect(() => {
     setIconFailed(false);
-    setIconLoaded(false);
-  }, [panel.id, panel.iconSource.path, panel.web?.url]);
+  }, [panel.id, panel.iconSource.path, panel.iconSource.dataUrl, panel.web?.url]);
 
   return (
     <button
@@ -86,14 +84,16 @@ export function DockItem({
       ) : null}
 
       <span
-        className={`flex h-7 w-7 items-center justify-center overflow-hidden rounded-lg ${
+        className={`relative h-7 w-7 overflow-hidden rounded-lg ${
           highlighted ? 'animate-[dockPulse_560ms_ease-out]' : ''
         }`}
       >
+        {/* fallback 字母作为 backdrop 一直在底层，img 加载成功直接盖住；
+            img onError 时移除自身露出字母。不依赖 onLoad 来 toggle 显隐——
+            data: URL 同步解码导致 onLoad 在 React 挂载监听之前就触发完，
+            会让旧实现的 iconLoaded 永远停在 false，图标一直被隐藏。 */}
         <span
-          className={`flex h-7 w-7 items-center justify-center rounded-lg text-xs font-semibold text-white ${
-            iconLoaded && !iconFailed ? 'hidden' : ''
-          }`}
+          className="absolute inset-0 flex items-center justify-center rounded-lg text-xs font-semibold text-white"
           style={{ backgroundColor: buildFallbackColor(panel) }}
         >
           {buildFallbackLabel(panel)}
@@ -102,12 +102,8 @@ export function DockItem({
           <img
             src={iconSrc}
             alt={panel.title}
-            className={`h-7 w-7 object-cover ${iconLoaded ? 'block' : 'hidden'}`}
-            onLoad={() => setIconLoaded(true)}
-            onError={() => {
-              setIconFailed(true);
-              setIconLoaded(false);
-            }}
+            className="absolute inset-0 h-7 w-7 rounded-lg object-cover"
+            onError={() => setIconFailed(true)}
           />
         ) : null}
       </span>

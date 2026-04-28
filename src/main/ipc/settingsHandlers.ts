@@ -1,11 +1,29 @@
 import { app, BrowserWindow, dialog, ipcMain, session, shell } from 'electron';
 import { copyFile, readFile } from 'node:fs/promises';
+import { APP_VERSION } from '../../shared/constants';
 import { IPC_CHANNELS } from '../../shared/ipc-contracts';
+import type { UpdateCheckResult } from '../../shared/ipc-contracts';
 import type { AppConfig, IpcResult } from '../../shared/types';
 import { logger } from '../utils/logger';
 import { getConfigPath } from '../utils/paths';
 import type { ConfigStore } from '../store/ConfigStore';
 import type { WindowManager } from '../windows/WindowManager';
+
+const compareSemver = (a: string, b: string): number => {
+  const parse = (v: string): number[] =>
+    v
+      .split(/[.-]/)
+      .map((part) => Number.parseInt(part, 10))
+      .map((n) => (Number.isFinite(n) ? n : 0));
+  const pa = parse(a);
+  const pb = parse(b);
+  const len = Math.max(pa.length, pb.length);
+  for (let i = 0; i < len; i += 1) {
+    const diff = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+};
 
 const isValidConfigShape = (raw: unknown): raw is AppConfig => {
   if (!raw || typeof raw !== 'object') return false;
@@ -96,9 +114,44 @@ export const registerSettingsHandlers = (
   });
 
   ipcMain.handle(IPC_CHANNELS.settingsCheckUpdate, async (): Promise<
-    IpcResult<{ status: 'placeholder' }>
+    IpcResult<UpdateCheckResult>
   > => {
-    return { ok: true, data: { status: 'placeholder' } };
+    const repo = process.env.SIDEBAR_PLUS_UPDATE_REPO?.trim();
+    if (!repo) {
+      return {
+        ok: true,
+        data: { current: APP_VERSION, latest: null, status: 'no-remote' }
+      };
+    }
+
+    try {
+      const response = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, {
+        headers: { Accept: 'application/vnd.github+json' }
+      });
+      if (!response.ok) {
+        throw new Error(`GitHub API ${response.status}`);
+      }
+      const json = (await response.json()) as { tag_name?: string; html_url?: string };
+      const latestRaw = (json.tag_name ?? '').trim();
+      const latest = latestRaw.replace(/^v/i, '');
+      const status: UpdateCheckResult['status'] =
+        latest && compareSemver(latest, APP_VERSION) > 0 ? 'available' : 'up-to-date';
+      return {
+        ok: true,
+        data: { current: APP_VERSION, latest: latest || null, status, url: json.html_url }
+      };
+    } catch (error) {
+      logger.error('settings:check-update failed', error);
+      return {
+        ok: true,
+        data: {
+          current: APP_VERSION,
+          latest: null,
+          status: 'error',
+          error: error instanceof Error ? error.message : 'unknown'
+        }
+      };
+    }
   });
 
   ipcMain.handle(IPC_CHANNELS.settingsQuitApp, async (): Promise<IpcResult<void>> => {

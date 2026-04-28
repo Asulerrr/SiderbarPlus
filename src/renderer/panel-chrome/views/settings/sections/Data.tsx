@@ -1,17 +1,23 @@
 import { useState } from 'react';
 
+const rowClass =
+  'group flex w-full items-center justify-between border-b border-white/5 py-3.5 text-left transition-colors';
+const labelClass = 'text-[13px] tracking-cn text-white/82 group-hover:text-white';
+const arrowClass =
+  'font-mono text-[11px] text-white/30 transition-all group-hover:translate-x-0.5 group-hover:text-amber';
+
 export function Data(): JSX.Element {
   const [confirming, setConfirming] = useState(false);
 
   return (
-    <div className="space-y-3">
-      <h2 className="mb-3 text-base font-medium">数据</h2>
+    <div>
       <button
         type="button"
         onClick={() => void window.panelAPI.openConfigFolder()}
-        className="block w-full rounded-md border border-white/15 px-3 py-2 text-left text-sm hover:bg-white/5"
+        className={rowClass}
       >
-        打开配置文件夹
+        <span className={labelClass}>打开配置文件夹</span>
+        <span className={arrowClass}>→</span>
       </button>
       <button
         type="button"
@@ -21,9 +27,10 @@ export function Data(): JSX.Element {
             window.alert(`已导出到：${result.data.path}`);
           }
         }}
-        className="block w-full rounded-md border border-white/15 px-3 py-2 text-left text-sm hover:bg-white/5"
+        className={rowClass}
       >
-        导出配置
+        <span className={labelClass}>导出配置</span>
+        <span className={arrowClass}>↓</span>
       </button>
       <button
         type="button"
@@ -33,43 +40,62 @@ export function Data(): JSX.Element {
             window.alert(`导入失败：${result.error}`);
           }
         }}
-        className="block w-full rounded-md border border-white/15 px-3 py-2 text-left text-sm hover:bg-white/5"
+        className={rowClass}
       >
-        导入配置
+        <span className={labelClass}>导入配置</span>
+        <span className={arrowClass}>↑</span>
       </button>
-      {!confirming ? (
-        <button
-          type="button"
-          onClick={() => setConfirming(true)}
-          className="block w-full rounded-md border border-red-500/40 px-3 py-2 text-left text-sm text-red-400 hover:bg-red-500/10"
-        >
-          清除所有 Cookie 和缓存
-        </button>
-      ) : (
-        <div className="rounded-md border border-red-500/40 p-3">
-          <div className="mb-2 text-sm text-red-400">确认清除？此操作不可撤销。</div>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={async () => {
-                await window.panelAPI.clearStorageData();
-                setConfirming(false);
-                window.alert('已清除');
-              }}
-              className="rounded-md bg-red-500 px-3 py-1 text-sm text-white hover:bg-red-600"
-            >
-              确认清除
-            </button>
-            <button
-              type="button"
-              onClick={() => setConfirming(false)}
-              className="rounded-md border border-white/15 px-3 py-1 text-sm hover:bg-white/5"
-            >
-              取消
-            </button>
-          </div>
+
+      <div className="mt-6">
+        <div className="mb-3 font-mono text-[10px] tracking-[0.18em] text-white/35">
+          DANGER ZONE
         </div>
-      )}
+        {!confirming ? (
+          <button
+            type="button"
+            onClick={() => setConfirming(true)}
+            className="group flex w-full items-center justify-between border border-[#6b3333]/60 bg-[#1a0e0e] px-4 py-3 text-left transition-colors hover:border-[#a04848] hover:bg-[#241010]"
+          >
+            <span className="text-[13px] tracking-cn text-[#ff9d9d]">
+              清除所有 Cookie 和缓存
+            </span>
+            <span className="font-mono text-[11px] text-[#ff9d9d]/50 group-hover:text-[#ff9d9d]">
+              ✕
+            </span>
+          </button>
+        ) : (
+          <div className="border border-[#a04848] bg-[#1a0e0e] p-4">
+            <div className="mb-3 flex items-baseline gap-2">
+              <span className="font-mono text-[10px] tracking-wider text-[#ff9d9d]">
+                CONFIRM
+              </span>
+              <span className="text-[12px] tracking-cn text-[#ff9d9d]">
+                此操作不可撤销
+              </span>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  await window.panelAPI.clearStorageData();
+                  setConfirming(false);
+                  window.alert('已清除');
+                }}
+                className="bg-[#a04848] px-4 py-2 text-[12px] font-semibold tracking-cn text-white transition-colors hover:bg-[#b85555]"
+              >
+                确认清除
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirming(false)}
+                className="border border-white/15 px-4 py-2 text-[12px] tracking-cn text-white/70 transition-colors hover:border-white/30 hover:text-white"
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

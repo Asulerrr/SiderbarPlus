@@ -10,10 +10,13 @@ interface SliderProps {
 
 export function Slider({ label, min, max, step = 1, value, unit, onChange }: SliderProps): JSX.Element {
   return (
-    <div className="py-2">
-      <div className="mb-1 flex items-center justify-between text-sm">
-        <span>{label}</span>
-        <span className="text-white/70">{value}{unit}</span>
+    <div className="py-2.5">
+      <div className="mb-2 flex items-baseline justify-between">
+        <span className="text-[13px] tracking-cn text-white/82">{label}</span>
+        <span className="font-mono text-[12px] text-amber">
+          {value}
+          {unit ? <span className="text-white/40">{unit}</span> : null}
+        </span>
       </div>
       <input
         type="range"
@@ -22,7 +25,7 @@ export function Slider({ label, min, max, step = 1, value, unit, onChange }: Sli
         step={step}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full accent-accent"
+        className="slider-amber w-full"
       />
     </div>
   );

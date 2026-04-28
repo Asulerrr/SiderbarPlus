@@ -14,13 +14,16 @@ export const resetDevelopmentData = async (): Promise<void> => {
     return;
   }
 
+  // 默认只清 web 会话/缓存（保证开发期 web 端是干净的），
+  // **保留 config.json 与 icons**，这样用户在 dev 模式下添加的站点能跨重启保留。
+  // 需要回到带测试面板的默认配置时显式 SIDEBAR_PLUS_RESET_CONFIG=1。
+  const wipeConfig = process.env.SIDEBAR_PLUS_RESET_CONFIG === '1';
+
   const userDataPath = app.getPath('userData');
-  const targets = [
-    join(userDataPath, 'config.json'),
-    join(userDataPath, 'config.json.bak'),
-    join(userDataPath, 'config.json.tmp'),
-    join(userDataPath, 'icons'),
-    join(userDataPath, 'cache'),
+  // 注意：Windows NTFS 大小写不敏感，'Cache' 与 'cache' 解析为同一目录。
+  // 我们的 favicon 缓存现在放在 'favicon-cache/'（见 paths.ts）独占命名，
+  // 不会被这里清掉。
+  const sessionTargets = [
     join(userDataPath, 'Partitions', DEV_SHARED_PARTITION),
     join(userDataPath, 'Session Storage'),
     join(userDataPath, 'Local Storage'),
@@ -34,6 +37,14 @@ export const resetDevelopmentData = async (): Promise<void> => {
     join(userDataPath, 'DawnGraphiteCache'),
     join(userDataPath, 'DawnWebGPUCache')
   ];
+  const configTargets = [
+    join(userDataPath, 'config.json'),
+    join(userDataPath, 'config.json.bak'),
+    join(userDataPath, 'config.json.tmp'),
+    join(userDataPath, 'icons'),
+    join(userDataPath, 'favicon-cache')
+  ];
+  const targets = wipeConfig ? [...configTargets, ...sessionTargets] : sessionTargets;
 
   try {
     const sharedSession = session.fromPartition(DEV_SHARED_PARTITION, { cache: true });
@@ -51,5 +62,5 @@ export const resetDevelopmentData = async (): Promise<void> => {
     }
   }
 
-  logger.info('Development data reset completed.');
+  logger.info('Development data reset completed.', { wipeConfig });
 };

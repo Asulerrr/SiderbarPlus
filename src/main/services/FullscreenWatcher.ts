@@ -26,6 +26,7 @@ type Rect = { left: number; top: number; right: number; bottom: number };
 interface User32 {
   GetForegroundWindow: () => unknown; // 返回 HWND 指针
   GetWindowRect: (hwnd: unknown, rect: Rect) => number;
+  GetClassNameA: (hwnd: unknown, buf: Buffer, max: number) => number;
 }
 
 const loadUser32 = (): User32 | null => {
@@ -36,10 +37,34 @@ const loadUser32 = (): User32 | null => {
     const lib = koffi.load('user32.dll');
     return {
       GetForegroundWindow: lib.func('void *GetForegroundWindow()') as never,
-      GetWindowRect: lib.func('int __stdcall GetWindowRect(void *hwnd, _Out_ RECT *rect)') as never
+      GetWindowRect: lib.func('int __stdcall GetWindowRect(void *hwnd, _Out_ RECT *rect)') as never,
+      GetClassNameA: lib.func(
+        'int __stdcall GetClassNameA(void *hwnd, char *lpClassName, int nMaxCount)'
+      ) as never
     };
   } catch (error) {
     logger.error('FullscreenWatcher failed to load user32.dll', error);
+    return null;
+  }
+};
+
+// Windows 桌面 / 任务栏壳窗口的类名。它们的 bounds 覆盖整屏，会被简单的
+// "前台窗口 == 显示器 bounds" 判断误判为全屏 → 触发 dock 隐藏。
+// 用户点击桌面、最小化所有窗口、Win+D 都会让这些壳窗口成为前台。
+const SHELL_WINDOW_CLASSES = new Set([
+  'Progman', // 桌面 Program Manager
+  'WorkerW', // 桌面壁纸 / 幻灯片背景
+  'Shell_TrayWnd', // 主任务栏
+  'Shell_SecondaryTrayWnd' // 副屏任务栏
+]);
+
+const readClassName = (user32: User32, hwnd: unknown): string | null => {
+  try {
+    const buf = Buffer.alloc(256);
+    const len = user32.GetClassNameA(hwnd, buf, buf.length);
+    if (len <= 0) return null;
+    return buf.subarray(0, len).toString('ascii');
+  } catch {
     return null;
   }
 };
@@ -104,6 +129,17 @@ export class FullscreenWatcher {
 
       const hwndKey = hwndToBigInt(hwndPtr);
       if (this.excludedHandles.has(hwndKey)) {
+        if (this.isFullscreenActive) {
+          this.isFullscreenActive = false;
+          this.onExitFullscreen();
+        }
+        return;
+      }
+
+      // 排除 Windows 桌面 / 任务栏壳窗口：它们 bounds 等于整屏，会被误判为全屏。
+      // 用户点击桌面、Win+D、显示桌面按钮都会让壳窗口成为前台。
+      const className = readClassName(this.user32, hwndPtr);
+      if (className && SHELL_WINDOW_CLASSES.has(className)) {
         if (this.isFullscreenActive) {
           this.isFullscreenActive = false;
           this.onExitFullscreen();
