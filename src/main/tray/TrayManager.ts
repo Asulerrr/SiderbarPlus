@@ -21,7 +21,9 @@ export class TrayManager {
       return this.tray;
     }
 
-    const iconPath = join(app.getAppPath(), 'icon', 'sidebar.ico');
+    const appPath = app.getAppPath();
+    const basePath = appPath.endsWith('.asar') ? appPath + '.unpacked' : appPath;
+    const iconPath = join(basePath, 'icon', 'sidebar.ico');
     const image = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
 
     this.tray = new Tray(image);
