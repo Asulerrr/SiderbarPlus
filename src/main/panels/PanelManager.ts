@@ -57,6 +57,8 @@ export class PanelManager {
   private panelMode: 'hover' | 'pinned' = 'hover';
   private edge: Edge = 'right';
   private displayId: number | undefined = undefined;
+  /** 缓存 builtin 面板（设置等）最后一次拖拽宽度，下次打开时复用 */
+  private builtinPreferredWidths = new Map<string, number>();
   private hoverCloseDelayMs = 300;
   private pendingDestroyId: string | null = null;
   private lastResizeDragWidth: number | null = null;
@@ -526,6 +528,8 @@ export class PanelManager {
         p.id === this.currentPanelId ? { ...p, preferredWidth: width } : p
       );
       await this.configStore.update({ panels: nextPanels });
+    } else if (isBuiltin && this.currentPanelId) {
+      this.builtinPreferredWidths.set(this.currentPanelId, width);
     }
 
     // hover 模式下，拖动期间通过父容器 mousedown 设置了 sticky=true，
@@ -837,6 +841,7 @@ export class PanelManager {
           fallbackColor: '#375a7f'
         },
         order: -1,
+        preferredWidth: this.builtinPreferredWidths.get(BUILTIN_ADD_SITE_ID),
         builtin: {
           widgetId: 'add-site'
         }
@@ -854,7 +859,7 @@ export class PanelManager {
           fallbackColor: '#5f4b8b'
         },
         order: -1,
-
+        preferredWidth: this.builtinPreferredWidths.get(panelId),
         builtin: {
           widgetId: 'edit-site',
           targetPanelId: builtinRoute.targetPanelId
@@ -873,7 +878,7 @@ export class PanelManager {
           fallbackColor: '#3f6f62'
         },
         order: -1,
-
+        preferredWidth: this.builtinPreferredWidths.get(panelId),
         builtin: {
           widgetId: 'site-info',
           targetPanelId: builtinRoute.targetPanelId
@@ -892,7 +897,7 @@ export class PanelManager {
           fallbackColor: '#3a3a3a'
         },
         order: -1,
-
+        preferredWidth: this.builtinPreferredWidths.get(BUILTIN_SETTINGS_ID),
         builtin: {
           widgetId: 'settings'
         }

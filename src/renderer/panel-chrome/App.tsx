@@ -161,7 +161,7 @@ export default function App(): JSX.Element {
         inputBg: '#F9F9F9',
         text: '#1B1B1B',
         mutedText: 'rgba(27,27,27,0.56)',
-        subtleBorder: 'rgba(0,0,0,0.06)',
+        subtleBorder: 'rgba(0,0,0,0.10)',
         hoverBg: 'rgba(0,0,0,0.04)',
       };
     }
@@ -171,7 +171,7 @@ export default function App(): JSX.Element {
       inputBg: 'transparent',
       text: surface.fg,
       mutedText: '#FFFFFF8F',
-      subtleBorder: 'rgba(255,255,255,0.04)',
+      subtleBorder: 'rgba(255,255,255,0.08)',
       hoverBg: 'rgba(255,255,255,0.04)',
     };
   }, [isLightBg, surface.fg]);
@@ -701,11 +701,11 @@ export default function App(): JSX.Element {
 
                     <div>
                       <div className="field-label mb-3">图标预览</div>
-                      <div className="flex min-h-[120px] items-center gap-5 py-5">
+                      <div className="flex min-h-[120px] items-center gap-5 rounded-lg border px-4 py-4" style={{ borderColor: colors.subtleBorder, backgroundColor: colors.inputBg }}>
                         <div
                           className="flex h-[72px] w-[72px] shrink-0 items-center justify-center overflow-hidden rounded-xl border-2 border-dashed"
                           style={{
-                            borderColor: `${colors.text}1F`,
+                            borderColor: colors.subtleBorder,
                             backgroundColor: 'transparent',
                           }}
                         >
@@ -722,7 +722,7 @@ export default function App(): JSX.Element {
                               className="h-full w-full object-cover"
                             />
                           ) : (
-                            <span className="select-none text-[28px] font-light leading-none" style={{ color: `${colors.text}28` }}>+</span>
+                            <span className="select-none text-[28px] font-light leading-none" style={{ color: colors.mutedText }}>+</span>
                           )}
                         </div>
 
