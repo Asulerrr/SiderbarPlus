@@ -33,6 +33,7 @@ export class PanelWindow {
       hasShadow: false,
       thickFrame: false,
       roundedCorners: false,
+      type: 'toolbar',
       skipTaskbar: true,
       backgroundColor: '#00000000',
       autoHideMenuBar: true,

@@ -4,8 +4,8 @@ import type { AppConfig, PanelState, PanelsUpdatedPayload } from '../../shared/t
 import type { ConfigStore } from '../store/ConfigStore';
 import { PanelManager } from '../panels/PanelManager';
 import { AppBarService } from '../services/AppBarService';
-import { getDockBounds } from '../utils/display';
-import { getPreferredPanelWidth, getPanelBounds } from '../utils/panelBounds';
+import { getDockBounds, getTargetDisplay } from '../utils/display';
+import { getPreferredPanelWidth, getPanelBounds, percentToPanelPx } from '../utils/panelBounds';
 import { logger } from '../utils/logger';
 import { PanelAnimationWindow } from './PanelAnimationWindow';
 import { DockWindow } from './DockWindow';
@@ -27,6 +27,7 @@ const createAppBarAnchor = (dipRect: {
     show: false,
     frame: false,
     transparent: true,
+    type: 'toolbar',
     skipTaskbar: true,
     resizable: false,
     movable: false,
@@ -162,8 +163,12 @@ export class WindowManager {
     this.panelManager?.forceCloseAndResetMode(edge, displayId);
     this.dockWindow?.updateConfig(config);
     this.dockWindow?.updateBounds(edge, displayId);
-    this.panelWindow?.updateBounds(edge, config.layout.panelDefaultWidth, displayId);
-    this.panelAnimationWindow?.updateBounds(edge, config.layout.panelDefaultWidth, displayId);
+    const maxWidthPx = percentToPanelPx(
+      config.layout.panelDefaultWidth,
+      getTargetDisplay(displayId).workArea.width
+    );
+    this.panelWindow?.updateBounds(edge, maxWidthPx, displayId);
+    this.panelAnimationWindow?.updateBounds(edge, maxWidthPx, displayId);
     this.unregisterAllAppBars();
     this.lastPanelState = { ...this.lastPanelState, edge, panelMode: 'hover', activePanelId: null };
     this.registerDockAppBar();
@@ -346,9 +351,13 @@ export class WindowManager {
       if (!refWin) return;
 
       const descriptor = config.panels.find((p) => p.id === state.activePanelId);
+      const maxWidthPx = percentToPanelPx(
+        config.layout.panelDefaultWidth,
+        getTargetDisplay(config.layout.displayId).workArea.width
+      );
       const panelWidthDip = getPreferredPanelWidth(
         descriptor?.preferredWidth,
-        config.layout.panelDefaultWidth
+        maxWidthPx
       );
       const dockDip = getDockBounds(state.edge, config.layout.displayId);
       const panelDip = getPanelBounds(state.edge, dockDip, panelWidthDip);
@@ -375,13 +384,12 @@ export class WindowManager {
       });
       logger.info('Panel AppBar anchor registered', { panelDip, physical });
 
-      // AppBar 注册完毕。Windows 可能在后续消息循环中异步推送
-      // always-on-top 窗口，需在多个时间点做防御性位置断言。
-      // display-metrics-changed 事件也会触发同样的断言。
-      this.assertAllVisibleWindows();
-      setTimeout(() => this.assertAllVisibleWindows(), 100);
-      setTimeout(() => this.assertAllVisibleWindows(), 300);
-      setTimeout(() => this.assertAllVisibleWindows(), 800);
+      // AppBar 注册完毕。Windows 异步处理 work area 变更后可能推送
+      // always-on-top 窗口。不在当前 tick 断言——等 Windows 先完成重算，
+      // 避免"窗口被 Windows 推离 → 被我们拉回"的闪烁。
+      setTimeout(() => this.assertAllVisibleWindows(), 80);
+      setTimeout(() => this.assertAllVisibleWindows(), 250);
+      setTimeout(() => this.assertAllVisibleWindows(), 600);
     } else {
       this.unregisterPanelAppBar();
     }
@@ -405,7 +413,15 @@ export class WindowManager {
     const dockBounds = getDockBounds(edge, displayId);
     const dockWin = this.dockWindow?.getBrowserWindow();
     if (dockWin && !dockWin.isDestroyed()) {
-      dockWin.setBounds(dockBounds);
+      const current = dockWin.getBounds();
+      if (
+        current.x !== dockBounds.x ||
+        current.y !== dockBounds.y ||
+        current.width !== dockBounds.width ||
+        current.height !== dockBounds.height
+      ) {
+        dockWin.setBounds(dockBounds);
+      }
     }
 
     this.panelWindow?.assertPosition();

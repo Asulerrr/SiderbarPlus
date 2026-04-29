@@ -1,49 +1,44 @@
+import { EllipsisVertical, Plus, X } from 'lucide-react';
+
 interface DockFooterProps {
   onShowAddSite: () => void;
   onOpenQuickMenu: () => void;
   onHideDock: () => void;
+  edge: 'left' | 'right';
+  fgColor: string;
+  separatorColor: string;
 }
-
-const buttonClassName =
-  'flex h-[42px] w-11 items-center justify-center text-[22px] leading-none font-medium text-white/88 transition-colors hover:bg-white/8 hover:text-white';
-
-const edgeButtonClassName =
-  'flex h-[42px] w-11 items-center justify-center text-[26px] leading-none font-medium text-white/88 transition-colors hover:bg-white/8 hover:text-white';
 
 export function DockFooter({
   onShowAddSite,
   onOpenQuickMenu,
-  onHideDock
+  onHideDock,
+  edge,
+  fgColor,
+  separatorColor
 }: DockFooterProps): JSX.Element {
   return (
-    <div className="flex w-full flex-col items-center gap-0 bg-dock px-0 pb-0.5 pt-0">
-      <div className="mb-3 mt-0.5 h-px w-8 bg-white/20" />
+    <div className={`flex w-full flex-col items-center gap-0 pb-0.5 pt-0 ${
+      edge === 'right' ? 'pl-1.5' : 'pr-1.5'
+    }`}>
+      <div className="mb-3 mt-0.5 h-px w-6" style={{ backgroundColor: separatorColor }} />
       <div className="-mt-1 flex w-full flex-col items-center gap-0">
-        <button
-          type="button"
-          className={edgeButtonClassName}
-          title="添加网页"
-          onMouseEnter={onShowAddSite}
-          onClick={onShowAddSite}
-        >
-          <span aria-hidden="true">+</span>
-        </button>
-        <button
-          type="button"
-          className={buttonClassName}
-          title="更多"
-          onClick={onOpenQuickMenu}
-        >
-          <span aria-hidden="true">⋮</span>
-        </button>
-        <button
-          type="button"
-          className={edgeButtonClassName}
-          title="隐藏侧边栏"
-          onClick={onHideDock}
-        >
-          <span aria-hidden="true">×</span>
-        </button>
+        {([
+          { icon: Plus, label: '添加网页', onClick: onShowAddSite },
+          { icon: EllipsisVertical, label: '更多', onClick: onOpenQuickMenu },
+          { icon: X, label: '隐藏侧边栏', onClick: onHideDock }
+        ] as const).map(({ icon: Icon, label, onClick }) => (
+          <button
+            key={label}
+            type="button"
+            className="flex h-[42px] w-[38px] items-center justify-center transition-colors hover:bg-white/6 mx-auto"
+            style={{ color: fgColor + '8F' }}
+            title={label}
+            onClick={onClick}
+          >
+            <Icon size={16} strokeWidth={1.5} aria-hidden="true" />
+          </button>
+        ))}
       </div>
     </div>
   );

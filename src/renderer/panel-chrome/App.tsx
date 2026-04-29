@@ -144,6 +144,37 @@ export default function App(): JSX.Element {
         : { bg: '#1b1b1b', fg: '#FFFFFFE6' },
     [config]
   );
+  // 自适应描边：亮底用深灰，暗底用浅灰
+  const isLightBg = useMemo(() => {
+    const hex = surface.bg.replace(/^#/, '');
+    const r = parseInt(hex.slice(0, 2), 16);
+    const g = parseInt(hex.slice(2, 4), 16);
+    const b = parseInt(hex.slice(4, 6), 16);
+    return (r * 0.299 + g * 0.587 + b * 0.114) > 128;
+  }, [surface.bg]);
+  const borderStyle = isLightBg ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.08)';
+  const colors = useMemo(() => {
+    if (isLightBg) {
+      return {
+        innerBg: '#FFFFFF',
+        footerBg: '#F5F5F5',
+        inputBg: '#F9F9F9',
+        text: '#1B1B1B',
+        mutedText: 'rgba(27,27,27,0.56)',
+        subtleBorder: 'rgba(0,0,0,0.06)',
+        hoverBg: 'rgba(0,0,0,0.04)',
+      };
+    }
+    return {
+      innerBg: '#202020',
+      footerBg: '#1C1C1C',
+      inputBg: 'transparent',
+      text: surface.fg,
+      mutedText: '#FFFFFF8F',
+      subtleBorder: 'rgba(255,255,255,0.04)',
+      hoverBg: 'rgba(255,255,255,0.04)',
+    };
+  }, [isLightBg, surface.fg]);
 
   const loadConfig = async (): Promise<AppConfig | null> => {
     const result = await window.panelAPI.readConfig();
@@ -477,7 +508,7 @@ export default function App(): JSX.Element {
         : await window.panelAPI.addPanel({
             type: 'web',
             title: deriveTitle(normalizedUrl),
-            preferredWidth: config?.layout.panelDefaultWidth ?? PANEL_DEFAULT_WIDTH,
+
             iconSource,
             web: {
               url: normalizedUrl,
@@ -534,21 +565,25 @@ export default function App(): JSX.Element {
       }}
     >
       <div
-        className="panel-shell absolute inset-0 overflow-hidden text-white"
-        style={{ backgroundColor: surface.bg }}
+        className="panel-shell absolute inset-0 overflow-hidden"
+        style={{ backgroundColor: surface.bg, color: colors.text }}
       >
         <ResizeHandle edge={chromeState.edge} />
         <div
-          className={`absolute flex flex-col overflow-hidden border border-white/6 bg-[#202020] shadow-[0_0_0_1px_rgba(0,0,0,0.18)] ${panelCardRadius} ${panelCardBorder}`}
+          className={`absolute flex flex-col overflow-hidden shadow-[0_0_0_1px_rgba(0,0,0,0.18)] ${panelCardRadius} ${panelCardBorder}`}
           style={{
             left: chromeState.edge === 'right' ? CONTENT_INSET : 0,
             right: chromeState.edge === 'left' ? CONTENT_INSET : 0,
             top: PANEL_TOP_INSET,
-            bottom: CONTENT_INSET
+            bottom: CONTENT_INSET,
+            backgroundColor: surface.bg,
+            borderColor: borderStyle,
+            borderWidth: 1,
+            borderStyle: 'solid'
           }}
         >
           <div
-            className={`flex h-[76px] shrink-0 items-center justify-between bg-[#202020] px-4 transition-opacity duration-100 ${
+            className={`flex h-[76px] shrink-0 items-center justify-between px-4 transition-opacity duration-100 ${
               fading ? 'opacity-0' : 'opacity-100'
             }`}
           >
@@ -564,11 +599,11 @@ export default function App(): JSX.Element {
                 </button>
               ) : null}
               <div className="flex min-w-0 flex-1 flex-col justify-center gap-1">
-                <div className="min-w-0 truncate text-[15px] font-semibold leading-5 text-white">
+                <div className="min-w-0 truncate text-[15px] font-semibold leading-5" style={{ color: colors.text }}>
                   {chromeState.title}
                 </div>
-                <div className="min-w-0 truncate text-xs leading-4 text-white/42">
-                  {chromeState.url || (config ? '正在准备面板...' : 'Loading panel...')}
+                <div className="min-w-0 truncate text-xs leading-4" style={{ color: colors.mutedText }}>
+                  {isSiteFormPanel ? '添加任意网页' : isSettingsPanel ? '配置应用选项与偏好' : chromeState.url || (config ? '正在准备面板...' : 'Loading panel...')}
                 </div>
               </div>
             </div>
@@ -635,16 +670,11 @@ export default function App(): JSX.Element {
           </div>
           <div className="relative flex-1 overflow-hidden bg-[#242424]">
             {isSiteFormPanel ? (
-              <div className="absolute inset-0 flex flex-col bg-[#111111]">
+              <div className="absolute inset-0 flex flex-col" style={{ backgroundColor: colors.innerBg, color: colors.text }}>
                 <div className="min-h-0 flex-1 overflow-y-auto px-8 pb-8 pt-7">
-                  <div className="mb-7 flex items-baseline gap-3 animate-fade-up">
-                    <span className="font-mono text-[10px] tracking-[0.22em] text-white/30">
-                      {isEditSitePanel ? 'EDIT' : 'NEW'}
-                    </span>
-                    <h2 className="heading-rule font-display text-[15px] uppercase">
-                      {isEditSitePanel ? '编辑站点' : '添加网站'}
-                    </h2>
-                  </div>
+                  <h2 className="mb-7 animate-fade-up text-[15px] font-semibold tracking-cn" style={{ color: colors.text }}>
+                    {isEditSitePanel ? '编辑站点' : '添加网页'}
+                  </h2>
 
                   <div className="flex flex-col gap-7 animate-fade-up [animation-delay:60ms]">
                     <div>
@@ -658,7 +688,8 @@ export default function App(): JSX.Element {
                           }
                         }}
                         placeholder="例如 github.com 或 https://example.com"
-                        className="input-amber h-11 w-full border border-white/10 bg-transparent px-3 font-mono text-[14px] text-white outline-none transition-colors placeholder:font-body placeholder:text-[13px] placeholder:tracking-cn placeholder:text-white/30"
+                        className="input-accent h-11 w-full border bg-transparent px-3 font-mono text-[14px] outline-none transition-colors placeholder:font-body placeholder:text-[13px] placeholder:tracking-cn"
+                        style={{ borderColor: colors.subtleBorder, color: colors.text }}
                       />
                       {addSiteError ? (
                         <div className="mt-2.5 flex items-center gap-2 text-[12px] tracking-cn text-[#ff9d9d]">
@@ -670,11 +701,12 @@ export default function App(): JSX.Element {
 
                     <div>
                       <div className="field-label mb-3">图标预览</div>
-                      <div className="dot-grid flex min-h-[120px] items-center gap-5 border border-white/8 bg-[#0d0d0d] px-5 py-5">
+                      <div className="flex min-h-[120px] items-center gap-5 py-5">
                         <div
-                          className="flex h-[72px] w-[72px] shrink-0 items-center justify-center overflow-hidden border border-white/10 bg-[#1a1a1a] font-display text-[28px] font-semibold text-white/85"
+                          className="flex h-[72px] w-[72px] shrink-0 items-center justify-center overflow-hidden rounded-xl border-2 border-dashed"
                           style={{
-                            backgroundColor: customIconPath || autoFavicon ? undefined : previewColor
+                            borderColor: `${colors.text}1F`,
+                            backgroundColor: 'transparent',
                           }}
                         >
                           {customIconPath ? (
@@ -690,7 +722,7 @@ export default function App(): JSX.Element {
                               className="h-full w-full object-cover"
                             />
                           ) : (
-                            previewLetter
+                            <span className="select-none text-[28px] font-light leading-none" style={{ color: `${colors.text}28` }}>+</span>
                           )}
                         </div>
 
@@ -707,7 +739,7 @@ export default function App(): JSX.Element {
                                       : 'bg-white/25'
                               }`}
                             />
-                            <span className="truncate text-[12px] tracking-cn text-white/55">
+                            <span className="truncate text-[12px] tracking-cn" style={{ color: colors.mutedText }}>
                               {customIconPath
                                 ? '使用自定义图标'
                                 : faviconLoading
@@ -722,7 +754,8 @@ export default function App(): JSX.Element {
                           <div className="flex flex-wrap gap-2">
                             <button
                               type="button"
-                              className="border border-white/12 bg-transparent px-3 py-1.5 text-[12px] tracking-cn text-white/75 transition-colors hover:border-amber/60 hover:text-amber"
+                              className="border bg-transparent px-3 py-1.5 text-[12px] tracking-cn transition-colors hover:border-accent/60 hover:text-accent"
+                              style={{ borderColor: colors.subtleBorder, color: colors.mutedText }}
                               onClick={() => void handlePickCustomIcon()}
                             >
                               手动选择
@@ -730,7 +763,8 @@ export default function App(): JSX.Element {
                             {customIconPath ? (
                               <button
                                 type="button"
-                                className="border border-white/12 bg-transparent px-3 py-1.5 text-[12px] tracking-cn text-white/55 transition-colors hover:border-white/30 hover:text-white/80"
+                                className="border bg-transparent px-3 py-1.5 text-[12px] tracking-cn transition-colors hover:border-white/30"
+                                style={{ borderColor: colors.subtleBorder, color: colors.mutedText }}
                                 onClick={() => setCustomIconPath(null)}
                               >
                                 清除
@@ -746,32 +780,34 @@ export default function App(): JSX.Element {
                       <select
                         value={selectedBrowserId}
                         onChange={(event) => setSelectedBrowserId(event.target.value)}
-                        className="input-amber h-11 w-full border border-white/10 bg-transparent px-3 text-[13px] tracking-cn text-white outline-none transition-colors"
+                        className="input-accent h-11 w-full border bg-transparent px-3 text-[13px] tracking-cn outline-none transition-colors"
+                        style={{ borderColor: colors.subtleBorder, color: colors.text, backgroundColor: colors.inputBg }}
                       >
                         {browsers.map((browser) => (
-                          <option key={browser.id} value={browser.id} className="bg-[#1a1a1a]">
+                          <option key={browser.id} value={browser.id} style={{ backgroundColor: colors.innerBg, color: colors.text }}>
                             {browser.name}
                           </option>
                         ))}
                       </select>
-                      <p className="mt-2.5 border-l-2 border-white/10 pl-3 text-[12px] leading-relaxed tracking-cn text-white/45">
+                      <p className="mt-2.5 border-l-2 pl-3 text-[12px] leading-relaxed tracking-cn" style={{ borderColor: colors.subtleBorder, color: colors.mutedText }}>
                         站内链接继续在侧边栏中打开。外开按钮会使用这里选择的浏览器。
                       </p>
                     </div>
                   </div>
                 </div>
 
-                <div className="flex h-[80px] shrink-0 items-center justify-between border-t border-white/6 bg-[#0d0d0d] px-8">
+                <div className="flex h-[80px] shrink-0 items-center justify-between border-t pl-8 pr-3" style={{ borderColor: colors.subtleBorder, backgroundColor: colors.footerBg }}>
                   <button
                     type="button"
-                    className="ghost-link px-1 py-1 text-[12px] tracking-cn text-white/55 transition-colors hover:text-white"
+                    className="ghost-link px-1 py-1 text-[12px] tracking-cn transition-colors"
+                    style={{ color: colors.mutedText }}
                     onClick={() => void window.panelAPI.closePanel()}
                   >
                     取消
                   </button>
                   <button
                     type="button"
-                    className="group inline-flex items-center gap-2 border border-amber/55 bg-transparent px-6 py-2.5 text-[12px] font-semibold tracking-cn text-amber transition-colors hover:bg-amber hover:text-black disabled:cursor-not-allowed disabled:border-white/15 disabled:bg-transparent disabled:text-white/35"
+                    className="group inline-flex items-center gap-2 rounded-md border border-accent/50 bg-accent/10 px-6 py-2.5 text-[12px] font-semibold tracking-cn text-accent transition-colors hover:bg-accent hover:text-[#0A0A0A] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"
                     disabled={submittingSite || !addSiteUrl.trim()}
                     onClick={() => void handleSubmitSite()}
                   >
@@ -863,7 +899,7 @@ export default function App(): JSX.Element {
                   )}
                 </div>
 
-                <div className="flex h-[88px] shrink-0 items-center justify-between border-t border-white/7 bg-[#191919] px-[24px]">
+                <div className="flex h-[88px] shrink-0 items-center justify-between border-t px-[24px]" style={{ borderColor: colors.subtleBorder, backgroundColor: colors.footerBg }}>
                   <div className="text-xs font-semibold text-white/34">数据来自当前共享会话</div>
                   <button
                     type="button"
@@ -875,7 +911,7 @@ export default function App(): JSX.Element {
                 </div>
               </div>
             ) : isSettingsPanel ? (
-              <SettingsView />
+              <SettingsView colors={colors} />
             ) : contentSnapshotDataUrl ? (
               <img
                 src={contentSnapshotDataUrl}

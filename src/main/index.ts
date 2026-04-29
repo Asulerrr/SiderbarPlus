@@ -114,8 +114,28 @@ app.on('window-all-closed', () => {
   }
 });
 
-// 退出前注销 AppBar，否则 Windows work area 会临时残留缩小，
-// 直到系统下次重算（其他 app 最大化时才恢复）。
+// 退出前注销 AppBar，否则 Windows work area 会临时残留缩小。
+// 同时销毁所有窗口，确保 Windows 任务栏图标立即消失。
 app.on('before-quit', () => {
   windowManager?.disposeAppBar();
+  BrowserWindow.getAllWindows().forEach((w) => {
+    if (!w.isDestroyed()) w.destroy();
+  });
+});
+
+// Ctrl+C / 终端关停：先同步清理 AppBar 占位和所有窗口，再退出。
+// app.quit() 在某些 Electron 版本可能被中断，直接同步执行确保 Windows 收到 ABM_REMOVE。
+process.on('SIGINT', () => {
+  windowManager?.disposeAppBar();
+  BrowserWindow.getAllWindows().forEach((w) => {
+    if (!w.isDestroyed()) w.destroy();
+  });
+  app.exit(0);
+});
+process.on('SIGTERM', () => {
+  windowManager?.disposeAppBar();
+  BrowserWindow.getAllWindows().forEach((w) => {
+    if (!w.isDestroyed()) w.destroy();
+  });
+  app.exit(0);
 });

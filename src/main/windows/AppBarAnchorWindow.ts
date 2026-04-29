@@ -27,6 +27,7 @@ export class AppBarAnchorWindow {
       show: false,
       frame: false,
       transparent: true,
+      type: 'toolbar',
       skipTaskbar: true,
       resizable: false,
       movable: false,

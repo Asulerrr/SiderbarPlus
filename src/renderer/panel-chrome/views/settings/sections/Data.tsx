@@ -1,13 +1,20 @@
 import { useState } from 'react';
 
-const rowClass =
-  'group flex w-full items-center justify-between border-b border-white/5 py-3.5 text-left transition-colors';
-const labelClass = 'text-[13px] tracking-cn text-white/82 group-hover:text-white';
-const arrowClass =
-  'font-mono text-[11px] text-white/30 transition-all group-hover:translate-x-0.5 group-hover:text-amber';
+interface DataColors {
+  text: string;
+  mutedText: string;
+  subtleBorder: string;
+}
 
-export function Data(): JSX.Element {
+export function Data({ colors }: { colors: DataColors }): JSX.Element {
   const [confirming, setConfirming] = useState(false);
+  const { text, mutedText, subtleBorder } = colors;
+
+  const rowClass =
+    'group flex w-full items-center justify-between border-b py-3.5 text-left transition-colors';
+  const labelClass = 'text-[13px] tracking-cn transition-colors';
+  const arrowClass =
+    'font-mono text-[11px] transition-all group-hover:translate-x-0.5 text-accent';
 
   return (
     <div>
@@ -15,8 +22,9 @@ export function Data(): JSX.Element {
         type="button"
         onClick={() => void window.panelAPI.openConfigFolder()}
         className={rowClass}
+        style={{ borderColor: subtleBorder }}
       >
-        <span className={labelClass}>打开配置文件夹</span>
+        <span className={labelClass} style={{ color: text }}>打开配置文件夹</span>
         <span className={arrowClass}>→</span>
       </button>
       <button
@@ -28,8 +36,9 @@ export function Data(): JSX.Element {
           }
         }}
         className={rowClass}
+        style={{ borderColor: subtleBorder }}
       >
-        <span className={labelClass}>导出配置</span>
+        <span className={labelClass} style={{ color: text }}>导出配置</span>
         <span className={arrowClass}>↓</span>
       </button>
       <button
@@ -41,13 +50,14 @@ export function Data(): JSX.Element {
           }
         }}
         className={rowClass}
+        style={{ borderColor: subtleBorder }}
       >
-        <span className={labelClass}>导入配置</span>
+        <span className={labelClass} style={{ color: text }}>导入配置</span>
         <span className={arrowClass}>↑</span>
       </button>
 
       <div className="mt-6">
-        <div className="mb-3 font-mono text-[10px] tracking-[0.18em] text-white/35">
+        <div className="mb-3 font-mono text-[10px] tracking-[0.18em]" style={{ color: mutedText, opacity: 0.55 }}>
           DANGER ZONE
         </div>
         {!confirming ? (
@@ -88,7 +98,8 @@ export function Data(): JSX.Element {
               <button
                 type="button"
                 onClick={() => setConfirming(false)}
-                className="border border-white/15 px-4 py-2 text-[12px] tracking-cn text-white/70 transition-colors hover:border-white/30 hover:text-white"
+                className="border px-4 py-2 text-[12px] tracking-cn transition-colors hover:border-white/30"
+                style={{ borderColor: subtleBorder, color: mutedText }}
               >
                 取消
               </button>

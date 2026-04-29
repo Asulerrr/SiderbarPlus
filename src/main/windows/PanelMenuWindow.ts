@@ -30,6 +30,7 @@ export class PanelMenuWindow {
       minimizable: false,
       maximizable: false,
       fullscreenable: false,
+      type: 'toolbar',
       skipTaskbar: true,
       hasShadow: false,
       thickFrame: false,

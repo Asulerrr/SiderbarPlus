@@ -29,6 +29,8 @@ export default defineConfig({
     }
   },
   renderer: {
+    server: { port: 1212, strictPort: false, host: '127.0.0.1' },
+    optimizeDeps: { include: ['lucide-react'] },
     resolve: {
       alias: {
         '@renderer': resolve(__dirname, 'src/renderer'),

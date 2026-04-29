@@ -4,14 +4,14 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        dock: '#1F1F1F',
+        dock: '#323232',
         accent: '#4CC2FF',
-        // editorial accent — 暖橘，配置流（add-site / settings）的高亮色
+        // 保留 amber 定义以兼容旧引用
         amber: {
-          DEFAULT: '#E8835D',
-          hover: '#D97757',
-          soft: 'rgba(232,131,93,0.12)',
-          line: 'rgba(232,131,93,0.55)'
+          DEFAULT: '#4CC2FF',
+          hover: '#3DB8F0',
+          soft: 'rgba(76,194,255,0.12)',
+          line: 'rgba(76,194,255,0.55)'
         }
       },
       fontFamily: {

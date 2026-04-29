@@ -9,7 +9,7 @@ import type { PanelAnimationWindow } from '../windows/PanelAnimationWindow';
 import type { PanelMenuWindow } from '../windows/PanelMenuWindow';
 import type { PanelWindow } from '../windows/PanelWindow';
 import { getDockBounds, getTargetDisplay } from '../utils/display';
-import { getPreferredPanelWidth } from '../utils/panelBounds';
+import { getPreferredPanelWidth, percentToPanelPx } from '../utils/panelBounds';
 import { WebPanelHost } from './WebPanelHost';
 
 export { clampPanelWidth } from './panelResize.ts';
@@ -477,7 +477,7 @@ export class PanelManager {
     // Bug 2: clamp must use dock's display, not cursor's display.
     // 双屏下鼠标可能在另一屏，但 dock 在 displayId 指定屏，必须用该屏 workArea 约束宽度。
     const display = getTargetDisplay(this.displayId);
-    const width = _clampPanelWidth(newWidth, display.workArea.width);
+    const width = _clampPanelWidth(newWidth, display.workArea.width, this.panelMaxWidthPercent);
     // Bug 3: 宽度未变化时跳过 setBounds，避免 Windows 相同 bounds 仍重绘闪烁。
     if (this.lastResizeDragWidth === width) {
       return;
@@ -494,7 +494,7 @@ export class PanelManager {
     // mouseup 终点：一次性对齐 view + 持久化 panelDefaultWidth
     // Bug 2: 同 resizeDrag，用 dock 所在屏 workArea。
     const display = getTargetDisplay(this.displayId);
-    const width = _clampPanelWidth(newWidth, display.workArea.width);
+    const width = _clampPanelWidth(newWidth, display.workArea.width, this.panelMaxWidthPercent);
 
     this.panelWindow.updateBounds(this.edge, width, this.displayId);
     // animationWindow 在 commit 保留同步，保证下次 open/close 动画 bounds 正确
@@ -525,12 +525,7 @@ export class PanelManager {
       const nextPanels = config.panels.map((p) =>
         p.id === this.currentPanelId ? { ...p, preferredWidth: width } : p
       );
-      await this.configStore.update({
-        panels: nextPanels,
-        layout: { panelDefaultWidth: width }
-      });
-    } else {
-      await this.configStore.update({ layout: { panelDefaultWidth: width } });
+      await this.configStore.update({ panels: nextPanels });
     }
 
     // hover 模式下，拖动期间通过父容器 mousedown 设置了 sticky=true，
@@ -575,16 +570,22 @@ export class PanelManager {
     }
   }
 
+  private panelMaxWidthPercent = 60;
+
   private applyHoverConfig(config: AppConfig): void {
     this.edge = config.layout.edge;
     this.displayId = config.layout.displayId;
     this.hoverCloseDelayMs = config.behavior.hoverCloseDelayMs;
+    const raw = config.layout.panelDefaultWidth;
+    this.panelMaxWidthPercent = raw >= 25 && raw <= 100 ? raw : 50;
   }
 
   private applyPanelBounds(descriptor: PanelDescriptor, config: AppConfig): void {
+    const display = getTargetDisplay(config.layout.displayId);
+    const maxWidthPx = percentToPanelPx(config.layout.panelDefaultWidth, display.workArea.width);
     const panelWidth = getPreferredPanelWidth(
       descriptor.preferredWidth,
-      config.layout.panelDefaultWidth
+      maxWidthPx
     );
 
     this.panelWindow.updateBounds(config.layout.edge, panelWidth, config.layout.displayId);
@@ -836,7 +837,6 @@ export class PanelManager {
           fallbackColor: '#375a7f'
         },
         order: -1,
-        preferredWidth: config.layout.panelDefaultWidth,
         builtin: {
           widgetId: 'add-site'
         }
@@ -854,7 +854,7 @@ export class PanelManager {
           fallbackColor: '#5f4b8b'
         },
         order: -1,
-        preferredWidth: config.layout.panelDefaultWidth,
+
         builtin: {
           widgetId: 'edit-site',
           targetPanelId: builtinRoute.targetPanelId
@@ -873,7 +873,7 @@ export class PanelManager {
           fallbackColor: '#3f6f62'
         },
         order: -1,
-        preferredWidth: config.layout.panelDefaultWidth,
+
         builtin: {
           widgetId: 'site-info',
           targetPanelId: builtinRoute.targetPanelId
@@ -892,7 +892,7 @@ export class PanelManager {
           fallbackColor: '#3a3a3a'
         },
         order: -1,
-        preferredWidth: config.layout.panelDefaultWidth,
+
         builtin: {
           widgetId: 'settings'
         }

@@ -7,6 +7,12 @@ export interface WindowBounds {
   height: number;
 }
 
+/** 将 config 中存储的百分比（30-100）转为像素。旧配置可能存像素值，超范围时回退默认 50%。 */
+export const percentToPanelPx = (panelDefaultWidth: number, workAreaWidth: number): number => {
+  const percent = panelDefaultWidth >= 25 && panelDefaultWidth <= 100 ? panelDefaultWidth : 50;
+  return Math.round((workAreaWidth * percent) / 100);
+};
+
 export const getPreferredPanelWidth = (
   preferredWidth: number | undefined,
   fallbackWidth: number

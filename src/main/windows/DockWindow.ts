@@ -30,6 +30,7 @@ export class DockWindow {
       maximizable: false,
       minimizable: false,
       show: false,
+      type: 'toolbar',
       skipTaskbar: true,
       backgroundColor: DOCK_BACKGROUND,
       autoHideMenuBar: true,

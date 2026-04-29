@@ -66,16 +66,17 @@ export function DockItem({
       type="button"
       title={panel.title}
       onPointerDown={(event) => onPointerDown(event, panel.id)}
+      onDragStart={(event) => event.preventDefault()}
       onMouseEnter={() => onHover(panel.id)}
       onClick={() => onActivate(panel.id)}
       onContextMenu={(event) => onContextMenu(event, panel)}
-      className={`group relative flex h-11 w-11 shrink-0 items-center justify-center transition-colors ${
+      className={`group relative flex h-[38px] w-[38px] shrink-0 items-center justify-center transition-colors mx-auto ${
         active
           ? 'bg-white/12'
           : highlighted
             ? 'bg-accent/18'
             : 'bg-transparent hover:bg-white/8'
-      } ${dragging ? 'cursor-grabbing opacity-60' : 'cursor-pointer'}`}
+      } ${dragging ? 'cursor-grabbing' : 'cursor-pointer'}`}
     >
       {active ? (
         <span
@@ -84,25 +85,25 @@ export function DockItem({
       ) : null}
 
       <span
-        className={`relative h-7 w-7 overflow-hidden rounded-lg ${
+        className={`relative h-5 w-5 overflow-hidden rounded-md ${
           highlighted ? 'animate-[dockPulse_560ms_ease-out]' : ''
         }`}
       >
-        {/* fallback 字母作为 backdrop 一直在底层，img 加载成功直接盖住；
-            img onError 时移除自身露出字母。不依赖 onLoad 来 toggle 显隐——
-            data: URL 同步解码导致 onLoad 在 React 挂载监听之前就触发完，
-            会让旧实现的 iconLoaded 永远停在 false，图标一直被隐藏。 */}
-        <span
-          className="absolute inset-0 flex items-center justify-center rounded-lg text-xs font-semibold text-white"
-          style={{ backgroundColor: buildFallbackColor(panel) }}
-        >
-          {buildFallbackLabel(panel)}
-        </span>
+        {/* 仅字母 fallback 显示颜色底板；图片图标（favicon/自定义）无需背景 */}
+        {!iconSrc || iconFailed ? (
+          <span
+            className="absolute inset-0 flex items-center justify-center rounded-lg text-xs font-semibold text-white"
+            style={{ backgroundColor: buildFallbackColor(panel) }}
+          >
+            {buildFallbackLabel(panel)}
+          </span>
+        ) : null}
         {iconSrc && !iconFailed ? (
           <img
             src={iconSrc}
             alt={panel.title}
-            className="absolute inset-0 h-7 w-7 rounded-lg object-cover"
+            draggable={false}
+            className="absolute inset-0 h-5 w-5 rounded-md object-cover"
             onError={() => setIconFailed(true)}
           />
         ) : null}

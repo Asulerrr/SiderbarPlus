@@ -141,11 +141,27 @@ export const registerAppHandlers = (
       // 5s 后也会自动恢复，不会让面板永远停在不可隐藏状态。
       windowManager.muteHide(5000);
       menu.once('menu-will-close', () => {
-        // 菜单关闭时立即清除静默；showPanel 已在选中"设置"等项时同步置 sticky=true，
-        // 不存在竞态。
         windowManager.clearHideMute();
       });
-      menu.popup({ window: dockWindow });
+
+      // 菜单定位：边缘对齐 dock、底部对齐 ⋮ 按钮
+      const MENU_WIDTH_EST = 200;
+      const MENU_HEIGHT_EST = displays.length > 1 ? 190 : 160;
+      const BUTTON_BOTTOM_FROM_DOCK = 44; // pb-0.5(2px) + X按钮(42px)
+      const dockBounds = dockWindow?.getBounds();
+      const edge = config.layout.edge;
+      const popupX =
+        edge === 'right'
+          ? (dockBounds?.x ?? 0) - MENU_WIDTH_EST
+          : (dockBounds?.x ?? 0) + (dockBounds?.width ?? 44);
+      const popupY =
+        (dockBounds?.y ?? 0) + (dockBounds?.height ?? 0) - BUTTON_BOTTOM_FROM_DOCK - MENU_HEIGHT_EST;
+
+      menu.popup({
+        window: dockWindow,
+        x: Math.round(popupX),
+        y: Math.round(popupY)
+      });
       return { ok: true, data: undefined };
     } catch (error) {
       logger.error('app:open-quick-menu failed', error);

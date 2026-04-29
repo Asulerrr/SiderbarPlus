@@ -130,22 +130,8 @@ export default function App(): JSX.Element {
     if (dragging) {
       return;
     }
-
     void window.dockAPI.cancelHide();
-
-    if (hoverTimerRef.current) {
-      window.clearTimeout(hoverTimerRef.current);
-    }
-
-    if (panelState.activePanelId) {
-      void window.dockAPI.hoverPanel(BUILTIN_ADD_SITE_ID);
-      return;
-    }
-
-    const hoverDelayMs = config?.behavior.hoverOpenDelayMs ?? 200;
-    hoverTimerRef.current = window.setTimeout(() => {
-      void window.dockAPI.hoverPanel(BUILTIN_ADD_SITE_ID);
-    }, hoverDelayMs);
+    void window.dockAPI.hoverPanel(BUILTIN_ADD_SITE_ID);
   };
 
   // panelState.edge 由 main 实时推送，是权威来源；config 只用作首屏兜底（IPC 推送前）
@@ -157,6 +143,14 @@ export default function App(): JSX.Element {
         : { bg: '#1F1F1F', fg: '#FFFFFFE6' },
     [config]
   );
+  const isLight = useMemo(() => {
+    const hex = surface.bg.replace(/^#/, '');
+    const r = parseInt(hex.slice(0, 2), 16);
+    const g = parseInt(hex.slice(2, 4), 16);
+    const b = parseInt(hex.slice(4, 6), 16);
+    return (r * 0.299 + g * 0.587 + b * 0.114) > 128;
+  }, [surface.bg]);
+  const separatorColor = isLight ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.1)';
   const activeIndicatorPanelId = shouldShowDockActiveIndicator(panelState)
     ? panelState.activePanelId
     : null;
@@ -194,6 +188,9 @@ export default function App(): JSX.Element {
 
       <div className="absolute inset-x-0 bottom-0 z-10">
         <DockFooter
+          edge={edge}
+          fgColor={surface.fg}
+          separatorColor={separatorColor}
           onShowAddSite={handleShowBuiltinPlaceholder}
           onOpenQuickMenu={() => {
             void window.dockAPI.openQuickMenu();

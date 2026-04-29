@@ -6,8 +6,8 @@ export interface SurfaceColors {
 }
 
 export const THEME_PRESETS: Record<'dark' | 'light', SurfaceColors> = {
-  dark: { bg: '#1B1B1BFF', fg: '#FFFFFFE6' },
-  light: { bg: '#F5F5F5FF', fg: '#1B1B1BE6' }
+  dark: { bg: '#323232FF', fg: '#FFFFFFE6' },
+  light: { bg: '#F3F3F3FF', fg: '#1B1B1BE6' }
 };
 
 export interface RGBA {

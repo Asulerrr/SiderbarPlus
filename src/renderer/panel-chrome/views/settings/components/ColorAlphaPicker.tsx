@@ -36,7 +36,7 @@ export function ColorAlphaPicker({ label, value, onChange }: Props): JSX.Element
         <div className="flex-1">
           <div className="mb-1.5 flex items-baseline justify-between">
             <span className="text-[11px] tracking-cn text-white/42">不透明度</span>
-            <span className="font-mono text-[12px] text-amber">
+            <span className="font-mono text-[12px] text-accent">
               {alphaPercent}
               <span className="text-white/40">%</span>
             </span>
@@ -47,7 +47,7 @@ export function ColorAlphaPicker({ label, value, onChange }: Props): JSX.Element
             max={100}
             value={alphaPercent}
             onChange={(e) => updateAlpha(Number(e.target.value))}
-            className="slider-amber w-full"
+            className="slider-accent w-full"
           />
         </div>
       </div>
