@@ -53,14 +53,16 @@ describe('resolveSurfaceColors', () => {
 });
 
 describe('needsTransparency', () => {
-  it('returns false for non-custom modes', () => {
-    assert.equal(needsTransparency({ themeMode: 'dark', customColor: '#00000000' }), false);
-    assert.equal(needsTransparency({ themeMode: 'system', customColor: '#00000000' }), false);
+  it('returns false for non-transparent modes', () => {
+    assert.equal(needsTransparency({ themeMode: 'dark', customColor: '#00000000', dockOpacity: 0 }), false);
+    assert.equal(needsTransparency({ themeMode: 'system', customColor: '#00000000', dockOpacity: 0 }), false);
+    assert.equal(needsTransparency({ themeMode: 'custom', customColor: '#1B1B1B80', dockOpacity: 0 }), false);
   });
-  it('returns false for fully opaque custom color', () => {
-    assert.equal(needsTransparency({ themeMode: 'custom', customColor: '#1B1B1BFF' }), false);
+  it('returns true for transparent mode with dockOpacity < 100', () => {
+    assert.equal(needsTransparency({ themeMode: 'transparent', customColor: '#00000000', dockOpacity: 0 }), true);
+    assert.equal(needsTransparency({ themeMode: 'transparent', customColor: '#00000000', dockOpacity: 50 }), true);
   });
-  it('returns true for transparent custom color', () => {
-    assert.equal(needsTransparency({ themeMode: 'custom', customColor: '#1B1B1B80' }), true);
+  it('returns false for transparent mode with full opacity', () => {
+    assert.equal(needsTransparency({ themeMode: 'transparent', customColor: '#00000000', dockOpacity: 100 }), false);
   });
 });

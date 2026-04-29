@@ -116,3 +116,18 @@ input[type='range'].slider-accent::-moz-range-thumb {
 .ghost-link:hover::after {
   width: 100%;
 }
+
+/* 滚动条：细条 + 暗色主题 */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
