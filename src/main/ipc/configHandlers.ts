@@ -30,6 +30,13 @@ export const registerConfigHandlers = (
     IPC_CHANNELS.configUpdate,
     async (_event, patch: Partial<AppConfig>): Promise<IpcResult<AppConfig>> => {
       try {
+        // 旧配置 panelDefaultWidth 可能是像素值(320-800)，规范化为百分比(25-100)
+        if (patch.layout?.panelDefaultWidth !== undefined) {
+          const raw = patch.layout.panelDefaultWidth;
+          if (raw < 25 || raw > 100) {
+            patch = { ...patch, layout: { ...patch.layout, panelDefaultWidth: 50 } };
+          }
+        }
         const before = await configStore.read();
         const config = await configStore.update(patch);
         // autoLaunch 变化时同步注册表（PRD §5.9.1）
@@ -47,6 +54,14 @@ export const registerConfigHandlers = (
           } else {
             fullscreenWatcher.stop();
           }
+        }
+        // 外观变更（主题模式 / dock 底板透明度）→ 同步 dock 窗口透明状态
+        if (
+          before.appearance.themeMode !== config.appearance.themeMode ||
+          before.appearance.dockOpacity !== config.appearance.dockOpacity
+        ) {
+          const dockWindow = windowManager.getDockWindow();
+          dockWindow?.updateConfig(config);
         }
         for (const win of BrowserWindow.getAllWindows()) {
           win.webContents.send(IPC_CHANNELS.configChanged, config);

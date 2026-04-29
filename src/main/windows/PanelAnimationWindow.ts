@@ -2,8 +2,8 @@ import { BrowserWindow } from 'electron';
 import { join } from 'node:path';
 import { IPC_CHANNELS } from '../../shared/ipc-contracts';
 import type { AppConfig } from '../../shared/types';
-import { getDockBounds } from '../utils/display';
-import { getPanelBounds } from '../utils/panelBounds';
+import { getDockBounds, getTargetDisplay } from '../utils/display';
+import { getPanelBounds, percentToPanelPx } from '../utils/panelBounds';
 
 export class PanelAnimationWindow {
   private window: BrowserWindow | null = null;
@@ -11,21 +11,29 @@ export class PanelAnimationWindow {
   private lastEdge: AppConfig['layout']['edge'];
 
   constructor(private readonly config: AppConfig) {
-    this.lastPanelWidth = config.layout.panelDefaultWidth;
+    const widthPx = percentToPanelPx(
+      config.layout.panelDefaultWidth,
+      getTargetDisplay(config.layout.displayId).workArea.width
+    );
+    this.lastPanelWidth = widthPx;
     this.lastEdge = config.layout.edge;
   }
 
   create(): BrowserWindow {
     const dockBounds = getDockBounds(this.config.layout.edge, this.config.layout.displayId);
+    const widthPx = percentToPanelPx(
+      this.config.layout.panelDefaultWidth,
+      getTargetDisplay(this.config.layout.displayId).workArea.width
+    );
     const panelBounds = getPanelBounds(
       this.config.layout.edge,
       dockBounds,
-      this.config.layout.panelDefaultWidth
+      widthPx
     );
 
     this.window = new BrowserWindow({
       ...panelBounds,
-      minWidth: this.config.layout.panelDefaultWidth,
+      minWidth: 320,
       minHeight: 480,
       frame: false,
       transparent: true,

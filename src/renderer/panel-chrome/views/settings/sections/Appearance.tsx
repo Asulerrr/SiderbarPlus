@@ -24,7 +24,7 @@ export function Appearance({ config, updateConfig, textColor, mutedColor }: Prop
       <Slider
         label="面板最大宽度"
         min={25} max={100} step={5} unit="%" textColor={textColor}
-        value={config.layout.panelDefaultWidth}
+        value={Math.min(100, Math.max(25, config.layout.panelDefaultWidth))}
         onChange={(v) => void updateConfig({ layout: { ...config.layout, panelDefaultWidth: v } })}
       />
       <Radio<ThemeMode>
@@ -33,11 +33,26 @@ export function Appearance({ config, updateConfig, textColor, mutedColor }: Prop
         mutedColor={mutedColor}
         options={[
           { value: 'system', label: '跟随系统' }, { value: 'light', label: '浅色' },
-          { value: 'dark', label: '深色' }, { value: 'custom', label: '自定义' }
+          { value: 'dark', label: '深色' }, { value: 'transparent', label: '透明色' },
+          { value: 'custom', label: '自定义' }
         ]}
         value={config.appearance.themeMode}
-        onChange={(v) => void updateConfig({ appearance: { ...config.appearance, themeMode: v } })}
+        onChange={(v) => {
+          const patch: Partial<AppConfig> = { appearance: { ...config.appearance, themeMode: v } };
+          if (v === 'transparent') {
+            patch.appearance!.dockOpacity = 0;
+          }
+          void updateConfig(patch);
+        }}
       />
+      {config.appearance.themeMode === 'transparent' && (
+        <Slider
+          label="Dock 底板透明度"
+          min={0} max={100} step={5} unit="%" textColor={textColor}
+          value={config.appearance.dockOpacity ?? 0}
+          onChange={(v) => void updateConfig({ appearance: { ...config.appearance, dockOpacity: v } })}
+        />
+      )}
       {config.appearance.themeMode === 'custom' && (
         <ColorAlphaPicker
           label="自定义颜色"

@@ -1,6 +1,5 @@
 import { BrowserWindow } from 'electron';
 import { join } from 'node:path';
-import { DOCK_BACKGROUND } from '../../shared/constants';
 import type { AppConfig } from '../../shared/types';
 import { logger } from '../utils/logger';
 import { getDockBounds } from '../utils/display';
@@ -20,7 +19,7 @@ export class DockWindow {
     this.window = new BrowserWindow({
       ...bounds,
       frame: false,
-      transparent: false,
+      transparent: true,
       hasShadow: false,
       thickFrame: false,
       roundedCorners: false,
@@ -32,7 +31,7 @@ export class DockWindow {
       show: false,
       type: 'toolbar',
       skipTaskbar: true,
-      backgroundColor: DOCK_BACKGROUND,
+      backgroundColor: '#00000000',
       autoHideMenuBar: true,
       webPreferences: {
         preload: join(__dirname, '../preload/dock.js'),

@@ -40,24 +40,40 @@ export const getReadableForeground = (hex8: string): string => {
 
 export const resolveSurfaceColors = (
   appearance: AppearanceConfig,
-  nativeIsDark: boolean
+  nativeIsDark: boolean,
+  applyDockOpacity = false
 ): SurfaceColors => {
+  let result: SurfaceColors;
   if (appearance.themeMode === 'custom') {
-    return {
+    result = {
       bg: appearance.customColor,
       fg: getReadableForeground(appearance.customColor)
     };
+  } else if (appearance.themeMode === 'transparent') {
+    result = { ...THEME_PRESETS.dark };
+  } else if (appearance.themeMode === 'system') {
+    result = nativeIsDark ? { ...THEME_PRESETS.dark } : { ...THEME_PRESETS.light };
+  } else {
+    result = { ...THEME_PRESETS[appearance.themeMode] };
   }
-  if (appearance.themeMode === 'system') {
-    return nativeIsDark ? THEME_PRESETS.dark : THEME_PRESETS.light;
+  if (applyDockOpacity && appearance.themeMode === 'transparent') {
+    return applyOpacity(result, appearance.dockOpacity);
   }
-  return THEME_PRESETS[appearance.themeMode];
+  return result;
+};
+
+/** 对 SurfaceColors.bg 的 alpha 通道按百分比缩放（0-100） */
+export const applyOpacity = (surface: SurfaceColors, percent: number): SurfaceColors => {
+  if (percent >= 100) return surface;
+  const { r, g, b } = parseHex8(surface.bg);
+  const a = Math.round((255 * percent) / 100);
+  const aa = a.toString(16).padStart(2, '0');
+  return {
+    bg: `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}${aa}`,
+    fg: surface.fg
+  };
 };
 
 export const needsTransparency = (appearance: AppearanceConfig): boolean => {
-  if (appearance.themeMode !== 'custom') {
-    return false;
-  }
-  const { a } = parseHex8(appearance.customColor);
-  return a < 255;
+  return appearance.themeMode === 'transparent' && appearance.dockOpacity < 100;
 };

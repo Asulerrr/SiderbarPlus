@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, session } from 'electron';
 import { join } from 'node:path';
 import { APP_ID, APP_NAME, BUILTIN_SETTINGS_ID } from '../shared/constants';
 import type { PanelState } from '../shared/types';
@@ -114,28 +114,36 @@ app.on('window-all-closed', () => {
   }
 });
 
-// 退出前注销 AppBar，否则 Windows work area 会临时残留缩小。
-// 同时销毁所有窗口，确保 Windows 任务栏图标立即消失。
-app.on('before-quit', () => {
+// 退出前注销 AppBar + 销毁所有窗口 + 持久化 cookies
+app.on('before-quit', (event) => {
   windowManager?.disposeAppBar();
+  BrowserWindow.getAllWindows().forEach((w) => {
+    if (!w.isDestroyed()) w.destroy();
+  });
+  // 阻止立即退出，等 cookie 刷盘完成
+  event.preventDefault();
+  session
+    .fromPartition('persist:shared', { cache: true })
+    .cookies.flushStore()
+    .then(() => app.exit(0))
+    .catch(() => app.exit(0));
+});
+
+// will-quit 是最后一道防线：确保所有窗口已销毁
+app.on('will-quit', () => {
   BrowserWindow.getAllWindows().forEach((w) => {
     if (!w.isDestroyed()) w.destroy();
   });
 });
 
-// Ctrl+C / 终端关停：先同步清理 AppBar 占位和所有窗口，再退出。
-// app.quit() 在某些 Electron 版本可能被中断，直接同步执行确保 Windows 收到 ABM_REMOVE。
-process.on('SIGINT', () => {
+// Ctrl+C / 终端关停：销毁窗口 + 注销 AppBar + app.quit()
+// before-quit 统一处理 cookie 刷盘
+const gracefulShutdown = (): void => {
   windowManager?.disposeAppBar();
   BrowserWindow.getAllWindows().forEach((w) => {
     if (!w.isDestroyed()) w.destroy();
   });
-  app.exit(0);
-});
-process.on('SIGTERM', () => {
-  windowManager?.disposeAppBar();
-  BrowserWindow.getAllWindows().forEach((w) => {
-    if (!w.isDestroyed()) w.destroy();
-  });
-  app.exit(0);
-});
+  app.quit();
+};
+process.on('SIGINT', gracefulShutdown);
+process.on('SIGTERM', gracefulShutdown);

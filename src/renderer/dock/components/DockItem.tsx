@@ -61,6 +61,9 @@ export function DockItem({
     setIconFailed(false);
   }, [panel.id, panel.iconSource.path, panel.iconSource.dataUrl, panel.web?.url]);
 
+  // 图标在 44px dock 中居中；热区 36×36 距边缘左5/右3（或左3/右5）
+  const iconPadLeft = edge === 'right' ? 9 : 7;
+
   return (
     <button
       type="button"
@@ -70,13 +73,14 @@ export function DockItem({
       onMouseEnter={() => onHover(panel.id)}
       onClick={() => onActivate(panel.id)}
       onContextMenu={(event) => onContextMenu(event, panel)}
-      className={`group relative flex h-[38px] w-[38px] shrink-0 items-center justify-center transition-colors mx-auto ${
+      className={`group relative flex h-[36px] w-[36px] shrink-0 items-center rounded-xl transition-colors ${
         active
           ? 'bg-white/12'
           : highlighted
             ? 'bg-accent/18'
             : 'bg-transparent hover:bg-white/8'
       } ${dragging ? 'cursor-grabbing' : 'cursor-pointer'}`}
+      style={{ paddingLeft: iconPadLeft, paddingRight: 36 - 20 - iconPadLeft }}
     >
       {active ? (
         <span
@@ -85,7 +89,7 @@ export function DockItem({
       ) : null}
 
       <span
-        className={`relative h-5 w-5 overflow-hidden rounded-md ${
+        className={`relative h-5 w-5 shrink-0 overflow-hidden rounded-md ${
           highlighted ? 'animate-[dockPulse_560ms_ease-out]' : ''
         }`}
       >

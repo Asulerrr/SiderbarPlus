@@ -2,9 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PanelDescriptor } from '@shared/types';
 import { DockItem } from './DockItem';
 
-const ITEM_HEIGHT = 38;
+const ITEM_HEIGHT = 40; // 36px 热区 + 4px 间距
 const DRAG_HOLD_MS = 300;
-const SCROLL_STEP = 38;
+const SCROLL_STEP = 40;
 const SCROLL_ZONE = 40;
 const SCROLL_SPEED = 5;
 
@@ -282,56 +282,54 @@ export function DockIconList({
     !!draggingPanelId || suppressTransitionRef.current;
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden">
-      <div
-        ref={containerRef}
-        className={`hide-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto py-1 ${
-          edge === 'right' ? 'pl-1.5' : 'pr-1.5'
-        }`}
-        onWheel={(event) => {
-          if (!containerRef.current) return;
-          event.preventDefault();
-          const direction = event.deltaY >= 0 ? 1 : -1;
-          containerRef.current.scrollTo({
-            top: containerRef.current.scrollTop + direction * SCROLL_STEP,
-            behavior: 'smooth'
-          });
-        }}
-      >
-        {orderedPanels.map((panel, idx) => (
+    <div
+      ref={containerRef}
+      className={`hide-scrollbar flex h-full flex-col gap-y-[4px] overflow-y-auto pt-1 pb-[24px] ${
+        edge === 'right' ? 'pl-[3px] pr-[5px]' : 'pl-[5px] pr-[3px]'
+      }`}
+      onWheel={(event) => {
+        if (!containerRef.current) return;
+        event.preventDefault();
+        const direction = event.deltaY >= 0 ? 1 : -1;
+        containerRef.current.scrollTo({
+          top: containerRef.current.scrollTop + direction * SCROLL_STEP,
+          behavior: 'smooth'
+        });
+      }}
+    >
+      {orderedPanels.map((panel, idx) => (
+        <div
+          key={panel.id}
+          className="shrink-0"
+          style={{
+            transform: getItemShift(idx),
+            transition: noTransition()
+              ? 'none'
+              : 'transform 180ms cubic-bezier(0.2, 0, 0, 1)',
+            zIndex: isDraggedItem(panel.id) ? 10 : 0,
+            position: 'relative'
+          }}
+        >
           <div
-            key={panel.id}
-            className="shrink-0"
             style={{
-              transform: getItemShift(idx),
-              transition: noTransition()
-                ? 'none'
-                : 'transform 180ms cubic-bezier(0.2, 0, 0, 1)',
-              zIndex: isDraggedItem(panel.id) ? 10 : 0,
-              position: 'relative'
+              opacity: isDraggedItem(panel.id) ? 0.85 : 1,
+              transition: 'opacity 120ms ease'
             }}
           >
-            <div
-              style={{
-                opacity: isDraggedItem(panel.id) ? 0.85 : 1,
-                transition: 'opacity 120ms ease'
-              }}
-            >
-              <DockItem
-                panel={panel}
-                active={panel.id === activePanelId}
-                highlighted={panel.id === highlightedPanelId}
-                dragging={isDraggedItem(panel.id)}
-                edge={edge}
-                onPointerDown={handlePointerDown}
-                onHover={handleItemHover}
-                onActivate={handleItemActivate}
-                onContextMenu={onContextMenu}
-              />
-            </div>
+            <DockItem
+              panel={panel}
+              active={panel.id === activePanelId}
+              highlighted={panel.id === highlightedPanelId}
+              dragging={isDraggedItem(panel.id)}
+              edge={edge}
+              onPointerDown={handlePointerDown}
+              onHover={handleItemHover}
+              onActivate={handleItemActivate}
+              onContextMenu={onContextMenu}
+            />
           </div>
-        ))}
-      </div>
+        </div>
+      ))}
     </div>
   );
 }

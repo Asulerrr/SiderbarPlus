@@ -1,8 +1,8 @@
-import { BrowserWindow } from 'electron';
+import { BrowserWindow, screen } from 'electron';
 import { join } from 'node:path';
 import type { AppConfig } from '../../shared/types';
-import { getDockBounds } from '../utils/display';
-import { type WindowBounds, getPanelBounds } from '../utils/panelBounds';
+import { getDockBounds, getTargetDisplay } from '../utils/display';
+import { type WindowBounds, getPanelBounds, percentToPanelPx } from '../utils/panelBounds';
 
 export class PanelWindow {
   private window: BrowserWindow | null = null;
@@ -10,21 +10,29 @@ export class PanelWindow {
   private lastEdge: AppConfig['layout']['edge'];
 
   constructor(private config: AppConfig) {
-    this.lastPanelWidth = config.layout.panelDefaultWidth;
+    const widthPx = percentToPanelPx(
+      config.layout.panelDefaultWidth,
+      getTargetDisplay(config.layout.displayId).workArea.width
+    );
+    this.lastPanelWidth = widthPx;
     this.lastEdge = config.layout.edge;
   }
 
   create(): BrowserWindow {
     const dockBounds = getDockBounds(this.config.layout.edge, this.config.layout.displayId);
+    const widthPx = percentToPanelPx(
+      this.config.layout.panelDefaultWidth,
+      getTargetDisplay(this.config.layout.displayId).workArea.width
+    );
     const panelBounds = getPanelBounds(
       this.config.layout.edge,
       dockBounds,
-      this.config.layout.panelDefaultWidth
+      widthPx
     );
 
     this.window = new BrowserWindow({
       ...panelBounds,
-      minWidth: this.config.layout.panelDefaultWidth,
+      minWidth: 320,
       minHeight: 480,
       resizable: false,
       frame: false,

@@ -6,6 +6,7 @@ export const APP_VERSION = '1.0.0';
 export const DOCK_WIDTH = 44;
 export const PANEL_DEFAULT_WIDTH = 50; // 屏幕宽度的百分比（30-100）
 export const DOCK_BACKGROUND = '#323232';
+export const DOCK_DEFAULT_OPACITY = 100;
 export const BUILTIN_ADD_SITE_ID = 'builtin:add-site';
 export const BUILTIN_SETTINGS_ID = 'builtin:settings';
 export const BUILTIN_EDIT_SITE_PREFIX = 'builtin:edit-site:';
@@ -113,7 +114,8 @@ export const DEFAULT_CONFIG = (): AppConfig => {
     },
     appearance: {
       themeMode: 'system',
-      customColor: '#1B1B1BFF'
+      customColor: '#1B1B1BFF',
+      dockOpacity: DOCK_DEFAULT_OPACITY
     },
     panels: isDev ? buildDevTestPanels() : [],
     meta: {

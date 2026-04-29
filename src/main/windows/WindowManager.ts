@@ -59,6 +59,7 @@ export class WindowManager {
   private panelAnchor: BrowserWindow | null = null;
   private panelAnchorWidthDip = 0;
   private lastAssertAllMs = 0;
+  private cachedWorkArea: { x: number; y: number; width: number; height: number } | null = null;
 
   private dockVisibleBeforeFullscreen: boolean | null = null;
   private lastPanelState: PanelState = {
@@ -402,13 +403,23 @@ export class WindowManager {
    * 事件和 AppBar 注册后同步/延迟调用，确保窗口始终贴屏边。
    */
   private assertAllVisibleWindows(): void {
-    // 防洪水：同一帧（16ms）内只执行一次
     const now = Date.now();
-    if (now - this.lastAssertAllMs < 16) return;
+    if (now - this.lastAssertAllMs < 80) return;
     this.lastAssertAllMs = now;
 
     const edge = this.lastPanelState.edge ?? this.config.layout.edge;
     const displayId = this.config.layout.displayId;
+
+    // 仅在 work area 实际变化时才校准位置（截图/全屏等触发的 display-metrics-changed 不影响 work area）
+    const display = getTargetDisplay(displayId);
+    const wa = display.workArea;
+    if (this.cachedWorkArea) {
+      const c = this.cachedWorkArea;
+      if (c.x === wa.x && c.y === wa.y && c.width === wa.width && c.height === wa.height) {
+        return;
+      }
+    }
+    this.cachedWorkArea = { x: wa.x, y: wa.y, width: wa.width, height: wa.height };
 
     const dockBounds = getDockBounds(edge, displayId);
     const dockWin = this.dockWindow?.getBrowserWindow();
@@ -424,8 +435,10 @@ export class WindowManager {
       }
     }
 
-    this.panelWindow?.assertPosition();
-    this.panelAnimationWindow?.assertPosition();
+    if (this.lastPanelState.panelVisible) {
+      this.panelWindow?.assertPosition();
+      this.panelAnimationWindow?.assertPosition();
+    }
   }
 
   private unregisterPanelAppBar(): void {

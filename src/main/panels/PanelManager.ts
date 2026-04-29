@@ -9,7 +9,7 @@ import type { PanelAnimationWindow } from '../windows/PanelAnimationWindow';
 import type { PanelMenuWindow } from '../windows/PanelMenuWindow';
 import type { PanelWindow } from '../windows/PanelWindow';
 import { getDockBounds, getTargetDisplay } from '../utils/display';
-import { getPreferredPanelWidth, percentToPanelPx } from '../utils/panelBounds';
+import { getPreferredPanelWidth } from '../utils/panelBounds';
 import { WebPanelHost } from './WebPanelHost';
 
 export { clampPanelWidth } from './panelResize.ts';
@@ -586,10 +586,10 @@ export class PanelManager {
 
   private applyPanelBounds(descriptor: PanelDescriptor, config: AppConfig): void {
     const display = getTargetDisplay(config.layout.displayId);
-    const maxWidthPx = percentToPanelPx(config.layout.panelDefaultWidth, display.workArea.width);
+    const minWidthPx = Math.max(360, Math.round(display.workArea.width * 25 / 100));
     const panelWidth = getPreferredPanelWidth(
       descriptor.preferredWidth,
-      maxWidthPx
+      minWidthPx
     );
 
     this.panelWindow.updateBounds(config.layout.edge, panelWidth, config.layout.displayId);

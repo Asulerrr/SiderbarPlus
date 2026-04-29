@@ -34,12 +34,14 @@ export interface PanelDescriptor {
   builtin?: BuiltinPanelConfig;
 }
 
-export type ThemeMode = 'system' | 'light' | 'dark' | 'custom';
+export type ThemeMode = 'system' | 'light' | 'dark' | 'transparent' | 'custom';
 
 export interface AppearanceConfig {
   themeMode: ThemeMode;
   /** '#RRGGBBAA'，仅 themeMode='custom' 时生效 */
   customColor: string;
+  /** Dock 底板不透明度 0-100。100=完全不透明，0=全透明 */
+  dockOpacity: number;
 }
 
 export interface AppConfig {

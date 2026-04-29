@@ -7,6 +7,12 @@ import { DockFooter } from './components/DockFooter';
 import { DockIconList } from './components/DockIconList';
 
 export default function App(): JSX.Element {
+  // 覆盖 global.css 的 :root background，仅对 dock 窗口生效
+  useEffect(() => {
+    document.documentElement.style.background = 'transparent';
+    return () => { document.documentElement.style.background = ''; };
+  }, []);
+
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [panels, setPanels] = useState<PanelDescriptor[]>([]);
   const [panelState, setPanelState] = useState<PanelState>({
@@ -139,7 +145,7 @@ export default function App(): JSX.Element {
   const surface = useMemo(
     () =>
       config
-        ? resolveSurfaceColors(config.appearance, true)
+        ? resolveSurfaceColors(config.appearance, true, true)
         : { bg: '#1F1F1F', fg: '#FFFFFFE6' },
     [config]
   );
@@ -158,7 +164,7 @@ export default function App(): JSX.Element {
   return (
     <main
       ref={rootRef}
-      className="relative h-screen w-[44px] text-white"
+      className="flex h-screen w-[44px] flex-col text-white"
       style={{ backgroundColor: surface.bg, color: surface.fg }}
       onMouseEnter={() => {
         void window.dockAPI.cancelHide();
@@ -170,7 +176,7 @@ export default function App(): JSX.Element {
         void window.dockAPI.scheduleHide();
       }}
     >
-      <div className="absolute inset-x-0 top-0 bottom-[126px]">
+      <div className="flex-1 min-h-0 overflow-hidden">
         <DockIconList
           panels={panels}
           activePanelId={activeIndicatorPanelId}
@@ -186,18 +192,16 @@ export default function App(): JSX.Element {
         />
       </div>
 
-      <div className="absolute inset-x-0 bottom-0 z-10">
-        <DockFooter
-          edge={edge}
-          fgColor={surface.fg}
-          separatorColor={separatorColor}
-          onShowAddSite={handleShowBuiltinPlaceholder}
-          onOpenQuickMenu={() => {
-            void window.dockAPI.openQuickMenu();
-          }}
-          onHideDock={() => void handleHideDock()}
-        />
-      </div>
+      <DockFooter
+        edge={edge}
+        fgColor={surface.fg}
+        separatorColor={separatorColor}
+        onShowAddSite={handleShowBuiltinPlaceholder}
+        onOpenQuickMenu={() => {
+          void window.dockAPI.openQuickMenu();
+        }}
+        onHideDock={() => void handleHideDock()}
+      />
 
       <span className="sr-only">{config ? `Dock ready on ${edge} edge` : 'Dock loading'}</span>
     </main>

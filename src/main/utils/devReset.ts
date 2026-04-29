@@ -24,7 +24,7 @@ export const resetDevelopmentData = async (): Promise<void> => {
   // 我们的 favicon 缓存现在放在 'favicon-cache/'（见 paths.ts）独占命名，
   // 不会被这里清掉。
   const sessionTargets = [
-    join(userDataPath, 'Partitions', DEV_SHARED_PARTITION),
+    // 不删 Partitions/persist:shared——保留 cookies/登录态
     join(userDataPath, 'Session Storage'),
     join(userDataPath, 'Local Storage'),
     join(userDataPath, 'SharedStorage'),
@@ -47,11 +47,11 @@ export const resetDevelopmentData = async (): Promise<void> => {
   const targets = wipeConfig ? [...configTargets, ...sessionTargets] : sessionTargets;
 
   try {
+    // 只清缓存，不碰 shared session 的 cookies/存储——保留登录态
     const sharedSession = session.fromPartition(DEV_SHARED_PARTITION, { cache: true });
-    await sharedSession.clearStorageData();
     await sharedSession.clearCache();
   } catch (error) {
-    logger.warn('Failed to clear development shared session before reset.', error);
+    logger.warn('Failed to clear development shared session cache.', error);
   }
 
   for (const target of targets) {
