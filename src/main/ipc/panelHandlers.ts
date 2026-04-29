@@ -22,7 +22,7 @@ import type { WindowManager } from '../windows/WindowManager';
 
 const emitPanelState = (state: PanelState): void => {
   for (const window of BrowserWindow.getAllWindows()) {
-    if (window.getTitle() === 'SideBar Plus Panel Animation') {
+    if (window.getTitle() === 'SideBar Panel Animation') {
       continue;
     }
 

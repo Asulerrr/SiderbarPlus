@@ -1,7 +1,7 @@
 {
-  "name": "sidebar-plus",
+  "name": "sidebar",
   "version": "1.0.0",
-  "description": "Sidebar Plus desktop sidebar for Windows.",
+  "description": "SideBar desktop sidebar for Windows.",
   "main": "./out/main/index.js",
   "author": "Codex",
   "license": "MIT",

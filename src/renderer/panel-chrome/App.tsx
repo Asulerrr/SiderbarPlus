@@ -112,7 +112,7 @@ export default function App(): JSX.Element {
   const [browsers, setBrowsers] = useState<BrowserInfo[]>([]);
   const [chromeState, setChromeState] = useState<ChromeState>({
     panelId: null,
-    title: 'SideBar Plus',
+    title: 'SideBar',
     url: '',
     canGoBack: false,
     edge: 'right',

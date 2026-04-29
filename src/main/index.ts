@@ -21,7 +21,7 @@ const isAutoStart = process.argv.includes('--autostart');
 
 const emitPanelState = (state: PanelState): void => {
   for (const window of BrowserWindow.getAllWindows()) {
-    if (window.getTitle() === 'SideBar Plus Panel Animation') {
+    if (window.getTitle() === 'SideBar Panel Animation') {
       continue;
     }
 
@@ -63,9 +63,6 @@ const bootstrap = async (): Promise<void> => {
     onShowDock: () => windowManager?.showDockFromTray(),
     onHideDock: () => windowManager?.hideDockToTray(),
     onOpenSettings: () => {
-      void windowManager?.showPanel(BUILTIN_SETTINGS_ID, true);
-    },
-    onOpenAbout: () => {
       void windowManager?.showPanel(BUILTIN_SETTINGS_ID, true);
     },
     onQuit: () => {
@@ -120,13 +117,19 @@ app.on('before-quit', (event) => {
   BrowserWindow.getAllWindows().forEach((w) => {
     if (!w.isDestroyed()) w.destroy();
   });
-  // 阻止立即退出，等 cookie 刷盘完成
+  // 阻止立即退出，等 cookie 刷盘 + Windows 处理 ABM_REMOVE 的 work area 恢复
   event.preventDefault();
   session
     .fromPartition('persist:shared', { cache: true })
     .cookies.flushStore()
-    .then(() => app.exit(0))
-    .catch(() => app.exit(0));
+    .then(() => {
+      // ABM_REMOVE 发送 WM_SETTINGCHANGE 给所有顶层窗口，其他应用需要时间
+      // 接收并处理。立即 exit 会让 Windows 消息来不及投递，work area 残留。
+      setTimeout(() => app.exit(0), 300);
+    })
+    .catch(() => {
+      setTimeout(() => app.exit(0), 300);
+    });
 });
 
 // will-quit 是最后一道防线：确保所有窗口已销毁

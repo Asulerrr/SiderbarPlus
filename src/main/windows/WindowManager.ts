@@ -305,7 +305,12 @@ export class WindowManager {
   }
 
   disposeAppBar(): void {
-    this.unregisterAllAppBars();
+    // 仅调用 ABM_REMOVE，不销毁锚点窗口。
+    // Windows 的 SHAppBarMessage(ABM_REMOVE) 需要窗口存活才能完成
+    // work area 恢复消息投递——立即 destroy 会导致 WM_SETTINGCHANGE
+    // 无法送达其它应用，work area 残留不释放。
+    // 锚点窗口由进程退出时 OS 统一清理。
+    this.appBarService.removeAll();
   }
 
   // ---------- AppBar（全部通过隐藏锚点实现）----------
@@ -352,13 +357,15 @@ export class WindowManager {
       if (!refWin) return;
 
       const descriptor = config.panels.find((p) => p.id === state.activePanelId);
+      const workAreaWidth = getTargetDisplay(config.layout.displayId).workArea.width;
       const maxWidthPx = percentToPanelPx(
         config.layout.panelDefaultWidth,
-        getTargetDisplay(config.layout.displayId).workArea.width
+        workAreaWidth
       );
       const panelWidthDip = getPreferredPanelWidth(
         descriptor?.preferredWidth,
-        maxWidthPx
+        maxWidthPx,
+        workAreaWidth
       );
       const dockDip = getDockBounds(state.edge, config.layout.displayId);
       const panelDip = getPanelBounds(state.edge, dockDip, panelWidthDip);
@@ -388,9 +395,12 @@ export class WindowManager {
       // AppBar 注册完毕。Windows 异步处理 work area 变更后可能推送
       // always-on-top 窗口。不在当前 tick 断言——等 Windows 先完成重算，
       // 避免"窗口被 Windows 推离 → 被我们拉回"的闪烁。
-      setTimeout(() => this.assertAllVisibleWindows(), 80);
-      setTimeout(() => this.assertAllVisibleWindows(), 250);
-      setTimeout(() => this.assertAllVisibleWindows(), 600);
+      // force=true：Windows 可能在 work area 变更后才异步推送 always-on-top 窗口，
+      // 不能依赖 cachedWorkArea 检查（首次 display-metrics-changed 触发时窗口可能还
+      // 没被推走，后续 work area 未变会跳过）。强制断言确保最终位置正确。
+      setTimeout(() => this.assertAllVisibleWindows(true), 80);
+      setTimeout(() => this.assertAllVisibleWindows(true), 250);
+      setTimeout(() => this.assertAllVisibleWindows(true), 600);
     } else {
       this.unregisterPanelAppBar();
     }
@@ -401,8 +411,11 @@ export class WindowManager {
    * 当 work area 变化（WM_SETTINGCHANGE）后 Windows 可能把
    * always-on-top 窗口推入新 work area。此方法在 display-metrics-changed
    * 事件和 AppBar 注册后同步/延迟调用，确保窗口始终贴屏边。
+   *
+   * @param force 跳过 work area 缓存检查——AppBar 注册后的延迟断言需要此参数，
+   *   因为 Windows 可能在 work area 变更之后才异步推送 always-on-top 窗口。
    */
-  private assertAllVisibleWindows(): void {
+  private assertAllVisibleWindows(force = false): void {
     const now = Date.now();
     if (now - this.lastAssertAllMs < 80) return;
     this.lastAssertAllMs = now;
@@ -410,13 +423,15 @@ export class WindowManager {
     const edge = this.lastPanelState.edge ?? this.config.layout.edge;
     const displayId = this.config.layout.displayId;
 
-    // 仅在 work area 实际变化时才校准位置（截图/全屏等触发的 display-metrics-changed 不影响 work area）
     const display = getTargetDisplay(displayId);
     const wa = display.workArea;
-    if (this.cachedWorkArea) {
-      const c = this.cachedWorkArea;
-      if (c.x === wa.x && c.y === wa.y && c.width === wa.width && c.height === wa.height) {
-        return;
+    if (!force) {
+      // 仅在 work area 实际变化时才校准位置（截图/全屏等触发的 display-metrics-changed 不影响 work area）
+      if (this.cachedWorkArea) {
+        const c = this.cachedWorkArea;
+        if (c.x === wa.x && c.y === wa.y && c.width === wa.width && c.height === wa.height) {
+          return;
+        }
       }
     }
     this.cachedWorkArea = { x: wa.x, y: wa.y, width: wa.width, height: wa.height };

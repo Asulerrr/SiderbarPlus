@@ -384,14 +384,14 @@ export class WebPanelHost {
         item.setSavePath(savePath);
 
         new Notification({
-          title: 'SideBar Plus',
+          title: 'SideBar',
           body: `开始下载 ${item.getFilename()}`
         }).show();
 
         item.once('done', (_downloadEvent, state) => {
           if (state === 'completed') {
             const completedNotification = new Notification({
-              title: 'SideBar Plus',
+              title: 'SideBar',
               body: `${item.getFilename()} 下载完成`
             });
             completedNotification.on('click', () => {
@@ -402,7 +402,7 @@ export class WebPanelHost {
           }
 
           new Notification({
-            title: 'SideBar Plus',
+            title: 'SideBar',
             body: `${item.getFilename()} 下载失败`
           }).show();
         });

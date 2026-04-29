@@ -136,7 +136,7 @@ export default function App(): JSX.Element {
           <div className="flex h-[76px] shrink-0 items-center justify-between bg-[#202020] px-4">
             <div className="flex min-w-0 flex-1 flex-col justify-center gap-1 pr-3">
               <div className="min-w-0 truncate text-[15px] font-semibold leading-5 text-white">
-                {payload?.descriptor.title ?? 'SideBar Plus'}
+                {payload?.descriptor.title ?? 'SideBar'}
               </div>
               <div className="min-w-0 truncate text-xs leading-4 text-white/42">
                 {payload?.url || '正在准备面板...'}

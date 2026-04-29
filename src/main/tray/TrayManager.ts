@@ -7,7 +7,6 @@ interface TrayManagerOptions {
   onShowDock: () => void;
   onHideDock: () => void;
   onOpenSettings: () => void;
-  onOpenAbout: () => void;
   onQuit: () => void;
   isDockVisible: () => boolean;
 }
@@ -22,7 +21,7 @@ export class TrayManager {
       return this.tray;
     }
 
-    const iconPath = join(app.getAppPath(), 'icon', 'icon-preview.png');
+    const iconPath = join(app.getAppPath(), 'icon', 'sidebar.ico');
     const image = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
 
     this.tray = new Tray(image);
@@ -59,7 +58,6 @@ export class TrayManager {
         },
         { type: 'separator' },
         { label: '设置', click: this.options.onOpenSettings },
-        { label: '关于', click: this.options.onOpenAbout },
         { type: 'separator' },
         { label: '退出', click: this.options.onQuit }
       ])

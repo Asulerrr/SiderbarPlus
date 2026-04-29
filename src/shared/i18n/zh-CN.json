@@ -1,9 +1,9 @@
 {
-  "app.name": "SideBar Plus",
+  "app.name": "SideBar",
   "app.loading_panel": "正在准备面板...",
   "app.loading_panel_en": "Loading panel...",
   "dock.hide_sidebar": "隐藏侧边栏",
-  "dock.auto_launch": "自动启动 Sidebar Plus",
+  "dock.auto_launch": "自动启动 SideBar",
   "dock.settings_pending": "设置面板将在 M8 实现。",
   "dock.about_pending": "M2 阶段占位入口",
   "panel.back": "返回",

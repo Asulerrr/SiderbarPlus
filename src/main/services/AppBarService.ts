@@ -189,7 +189,7 @@ export class AppBarService {
       cbSize: this.bindings.appBarDataSize,
       hWnd: entry.hwnd,
       uCallbackMessage: 0,
-      uEdge: 0,
+      uEdge: this.toEdgeCode(entry.edge),
       rc: { left: 0, top: 0, right: 0, bottom: 0 },
       lParam: 0n
     };
@@ -197,7 +197,7 @@ export class AppBarService {
     if (result) {
       logger.info('AppBar removed', { id });
     } else {
-      logger.warn('AppBar ABM_REMOVE failed', { id });
+      logger.warn('AppBar ABM_REMOVE failed', { id, edge: entry.edge });
     }
     this.entries.delete(id);
   }

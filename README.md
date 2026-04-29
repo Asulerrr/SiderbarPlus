@@ -1,39 +1,21 @@
-# Sidebar Plus
+# SideBar
 
-Electron-based Windows sidebar app scaffolded from the product PRD.
+Windows 桌面侧边栏应用。基于 Electron + React + TypeScript + Tailwind。
 
-## Milestone Status
-
-- `M1`: completed
-- `M2`: completed
-- `M3`: completed
-- `M4`: completed
-- `M5`: completed
-- `M6`: completed
-- `M7`: completed (auto-launch, single-instance lock, fullscreen detect, left/right edge switch)
-- `M8`: completed (settings panel UI, import/export, clear storage, GitHub-tag update check)
-- `M9`: in progress (electron-builder configured; pending icon.ico + first-run polish)
-
-## Development
+## 开发
 
 ```bash
 npm install
-npm run dev
-npm test
+npm run dev        # 开发模式
+npm run build      # 编译
+npm run build:win  # 编译 + 打包 Windows 安装包
+npm test           # 运行测试
 ```
 
-## Current Scope
+## 构建
 
-The repository currently contains the stabilized foundations through M5, plus PRD-aligned cleanup work for the next phase:
+```bash
+npm run build:win
+```
 
-- Electron + React + Tailwind + TypeScript scaffold
-- Main, Dock renderer, Panel chrome, animation layer, and panel menu entry points
-- Config store with backup handling and safer replace-based persistence
-- Basic file logging
-- Dock window pinned to the right edge at `44px`
-- Dock icon list driven by `config.panels`
-- Dock footer actions for `+`, `⋮`, and `×`
-- Hover-open web panel flow with sticky behavior and cross-icon switching
-- Title-bar actions, panel menu, add/edit site flow, site info, favicon fetching, and browser selection
-- Tray-based hide/show flow from the Dock close button
-- Node-based regression tests for shared utilities and selected main/renderer behaviors
+产物在 `dist/` 目录。

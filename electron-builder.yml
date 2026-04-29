@@ -1,5 +1,5 @@
-appId: com.sidebarplus.app
-productName: SideBar Plus
+appId: com.sidebar.app
+productName: SideBar
 copyright: Copyright © 2026
 directories:
   buildResources: resources
@@ -23,7 +23,7 @@ nsis:
   allowToChangeInstallationDirectory: true
   installerIcon: resources/icon.ico
   uninstallerIcon: resources/icon.ico
-  shortcutName: SideBar Plus
+  shortcutName: SideBar
   createDesktopShortcut: true
   createStartMenuShortcut: true
   license: resources/installer/license.txt

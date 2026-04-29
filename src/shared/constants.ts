@@ -1,7 +1,7 @@
 import type { AppConfig } from './types';
 
-export const APP_ID = 'com.sidebarplus.app';
-export const APP_NAME = 'SideBar Plus';
+export const APP_ID = 'com.sidebar.app';
+export const APP_NAME = 'SideBar';
 export const APP_VERSION = '1.0.0';
 export const DOCK_WIDTH = 44;
 export const PANEL_DEFAULT_WIDTH = 50; // 屏幕宽度的百分比（30-100）
@@ -82,7 +82,6 @@ const buildDevTestPanels = () =>
       fallbackColor: panel.fallbackColor
     },
     order: index,
-    preferredWidth: PANEL_DEFAULT_WIDTH,
     web: {
       url: panel.url,
       openInBrowser: 'system',

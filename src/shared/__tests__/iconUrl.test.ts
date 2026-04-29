@@ -5,11 +5,11 @@ import { toRenderableIconUrl } from '../iconUrl.ts';
 
 test('converts Windows icon paths with spaces to encoded file URLs', () => {
   const iconPath =
-    'C:\\Users\\Arun\\AppData\\Roaming\\SideBar Plus\\cache\\favicons\\www.doubao.com-2c48f218590d.png';
+    'C:\\Users\\Arun\\AppData\\Roaming\\SideBar\\cache\\favicons\\www.doubao.com-2c48f218590d.png';
 
   assert.equal(
     toRenderableIconUrl(iconPath),
-    'file:///C:/Users/Arun/AppData/Roaming/SideBar%20Plus/cache/favicons/www.doubao.com-2c48f218590d.png'
+    'file:///C:/Users/Arun/AppData/Roaming/SideBar/cache/favicons/www.doubao.com-2c48f218590d.png'
   );
 });
 

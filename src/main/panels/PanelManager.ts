@@ -586,10 +586,12 @@ export class PanelManager {
 
   private applyPanelBounds(descriptor: PanelDescriptor, config: AppConfig): void {
     const display = getTargetDisplay(config.layout.displayId);
-    const minWidthPx = Math.max(360, Math.round(display.workArea.width * 25 / 100));
+    const workAreaWidth = display.workArea.width;
+    const minWidthPx = Math.max(360, Math.round(workAreaWidth * 25 / 100));
     const panelWidth = getPreferredPanelWidth(
       descriptor.preferredWidth,
-      minWidthPx
+      minWidthPx,
+      workAreaWidth
     );
 
     this.panelWindow.updateBounds(config.layout.edge, panelWidth, config.layout.displayId);

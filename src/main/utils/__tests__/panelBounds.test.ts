@@ -43,12 +43,20 @@ test('uses descriptor preferred width when calculating panel bounds on the left 
   });
 });
 
+const WA = 1920;
+
 test('falls back to the global default width when descriptor width is missing or invalid', () => {
-  assert.equal(getPreferredPanelWidth(undefined, 456), 456);
-  assert.equal(getPreferredPanelWidth(0, 456), 456);
-  assert.equal(getPreferredPanelWidth(Number.NaN, 456), 456);
+  assert.equal(getPreferredPanelWidth(undefined, 456, WA), 456);
+  assert.equal(getPreferredPanelWidth(0, 456, WA), 456);
+  assert.equal(getPreferredPanelWidth(Number.NaN, 456, WA), 456);
 });
 
 test('rounds descriptor width to an integer before use', () => {
-  assert.equal(getPreferredPanelWidth(512.7, 456), 513);
+  assert.equal(getPreferredPanelWidth(512.7, 456, WA), 513);
+});
+
+test('treats [25, 100] range as percentage', () => {
+  assert.equal(getPreferredPanelWidth(50, 360, WA), Math.round(WA * 50 / 100));
+  assert.equal(getPreferredPanelWidth(25, 360, WA), Math.round(WA * 25 / 100));
+  assert.equal(getPreferredPanelWidth(100, 360, WA), Math.round(WA * 100 / 100));
 });

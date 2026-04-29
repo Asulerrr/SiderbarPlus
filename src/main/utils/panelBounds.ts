@@ -15,10 +15,16 @@ export const percentToPanelPx = (panelDefaultWidth: number, workAreaWidth: numbe
 
 export const getPreferredPanelWidth = (
   preferredWidth: number | undefined,
-  fallbackWidth: number
+  fallbackWidth: number,
+  workAreaWidth: number
 ): number => {
   if (typeof preferredWidth !== 'number' || !Number.isFinite(preferredWidth) || preferredWidth <= 0) {
     return fallbackWidth;
+  }
+
+  // [25, 100] 视为百分比（config 取值范围），转为像素
+  if (preferredWidth >= 25 && preferredWidth <= 100) {
+    return Math.round((workAreaWidth * preferredWidth) / 100);
   }
 
   return Math.round(preferredWidth);

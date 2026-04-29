@@ -67,7 +67,7 @@ export const registerAppHandlers = (
 
       const menu = Menu.buildFromTemplate([
         {
-          label: '自动启动 Sidebar Plus',
+          label: '自动启动 SideBar',
           type: 'checkbox',
           checked: config.app.autoLaunch,
           click: async () => {
@@ -125,12 +125,6 @@ export const registerAppHandlers = (
           click: () => {
             void windowManager.showPanel(BUILTIN_SETTINGS_ID, true);
           }
-        },
-        {
-          label: '关于',
-          click: () => {
-            void windowManager.showPanel(BUILTIN_SETTINGS_ID, true);
-          }
         }
       ]);
 
@@ -146,7 +140,7 @@ export const registerAppHandlers = (
 
       // 菜单定位：边缘对齐 dock、底部对齐 ⋮ 按钮
       const MENU_WIDTH_EST = 200;
-      const MENU_HEIGHT_EST = displays.length > 1 ? 190 : 160;
+      const MENU_HEIGHT_EST = displays.length > 1 ? 162 : 134;
       const BUTTON_BOTTOM_FROM_DOCK = 44; // pb-0.5(2px) + X按钮(42px)
       const dockBounds = dockWindow?.getBounds();
       const edge = config.layout.edge;

@@ -57,7 +57,7 @@ export const registerSettingsHandlers = (
     try {
       const result = await dialog.showSaveDialog({
         title: '导出配置',
-        defaultPath: 'sidebar-plus-config.json',
+        defaultPath: 'sidebar-config.json',
         filters: [{ name: 'JSON', extensions: ['json'] }]
       });
       if (result.canceled || !result.filePath) {
