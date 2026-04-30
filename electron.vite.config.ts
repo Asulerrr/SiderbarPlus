@@ -23,6 +23,7 @@ export default defineConfig({
           panelMenu: resolve(__dirname, 'src/preload/panelMenu.ts'),
           panelAnimation: resolve(__dirname, 'src/preload/panelAnimation.ts'),
           webPanel: resolve(__dirname, 'src/preload/webPanel.ts'),
+          webPanelPopup: resolve(__dirname, 'src/preload/webPanelPopup.ts'),
           builtin: resolve(__dirname, 'src/preload/builtin.ts')
         }
       }

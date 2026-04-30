@@ -1,8 +1,5 @@
-import { ipcRenderer } from 'electron';
-import { IPC_CHANNELS } from '../shared/ipc-contracts';
-
-// contextIsolation: false — preload runs in page world, synchronous.
-// Object.defineProperty takes effect before any page JS executes.
+// Standalone popup preload — contextIsolation: false, preload runs in page world.
+// Object.defineProperty is synchronous and guaranteed before any page JS.
 const chromeVersion = process.versions.chrome;
 const major = chromeVersion.split('.')[0];
 
@@ -59,29 +56,3 @@ window.chrome = {
     RunningState: { CANNOT_RUN: 'cannot_run', READY_TO_RUN: 'ready_to_run', RUNNING: 'running' }
   }
 };
-
-let lastCancelAt = 0;
-
-const cancelHide = (): void => {
-  const now = Date.now();
-  if (now - lastCancelAt < 120) {
-    return;
-  }
-  lastCancelAt = now;
-  void ipcRenderer.invoke(IPC_CHANNELS.panelsCancelHide);
-};
-
-const cancelInteractionHide = (): void => {
-  cancelHide();
-};
-
-const scheduleHide = (): void => {
-  void ipcRenderer.invoke(IPC_CHANNELS.panelsScheduleHide);
-};
-
-window.addEventListener('mouseenter', cancelHide, true);
-window.addEventListener('mousemove', cancelHide, true);
-window.addEventListener('wheel', cancelHide, true);
-window.addEventListener('mouseleave', scheduleHide, true);
-window.addEventListener('mousedown', cancelInteractionHide, true);
-window.addEventListener('keydown', cancelInteractionHide, true);

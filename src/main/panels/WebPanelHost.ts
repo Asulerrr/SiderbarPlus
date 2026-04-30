@@ -13,6 +13,7 @@ import { BrowserService } from '../services/BrowserService';
 import { logger } from '../utils/logger';
 
 const SHARED_PARTITION = 'persist:shared';
+const CHROME_USER_AGENT = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${process.versions.chrome} Safari/537.36`;
 const MOBILE_USER_AGENT =
   'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1';
 
@@ -34,6 +35,7 @@ export class WebPanelHost {
   private currentConfig: AppConfig | null = null;
   private downloadsBound = false;
   private permissionsBound = false;
+  private headersBound = false;
 
   constructor(private readonly dependencies: WebPanelHostDependencies) {
     void this.refreshConfig();
@@ -56,16 +58,54 @@ export class WebPanelHost {
         partition: SHARED_PARTITION,
         preload: join(__dirname, '../preload/webPanel.js'),
         nodeIntegration: false,
-        contextIsolation: true,
-        sandbox: false
-      }
+        contextIsolation: false,
+        sandbox: false,
+        nativeWindowOpen: true
+      } as any
     });
 
+    view.webContents.setUserAgent(CHROME_USER_AGENT);
     view.webContents.setBackgroundThrottling(false);
     view.webContents.setVisualZoomLevelLimits(1, 3).catch(() => undefined);
-    view.webContents.setWindowOpenHandler(({ url }) => {
-      void this.openExternal(descriptor.id, url);
-      return { action: 'deny' };
+    view.webContents.setWindowOpenHandler(({ url, features }) => {
+      const isDialog = /\bwidth\s*=\s*\d+|\bheight\s*=\s*\d+/i.test(features);
+      if (!isDialog) {
+        view.webContents.loadURL(url).catch(() => undefined);
+        return { action: 'deny' };
+      }
+
+      // Cross-origin OAuth popup → navigate main view instead.
+      // WebContentsView→BrowserWindow breaks window.opener, making
+      // popup-based OAuth impossible. Redirect mode avoids this.
+      const currentOrigin = (() => {
+        try { return new URL(view.webContents.getURL()).origin; } catch { return ''; }
+      })();
+      const isCrossOrigin = (() => {
+        try { return new URL(url).origin !== currentOrigin; } catch { return true; }
+      })();
+
+      if (isCrossOrigin) {
+        view.webContents.loadURL(url).catch(() => undefined);
+        return { action: 'deny' };
+      }
+
+      return {
+        action: 'allow',
+        overrideBrowserWindowOptions: {
+          width: 520,
+          height: 600,
+          autoHideMenuBar: true,
+          backgroundColor: '#1B1B1B',
+          webPreferences: {
+            partition: SHARED_PARTITION,
+            preload: join(__dirname, '../preload/webPanelPopup.js'),
+            nodeIntegration: false,
+            contextIsolation: false,
+            sandbox: false,
+            nativeWindowOpen: true
+          }
+        }
+      };
     });
 
     this.views.set(descriptor.id, view);
@@ -375,6 +415,18 @@ export class WebPanelHost {
 
         callback(this.isNotificationAllowed(webContents.getURL()));
       });
+    }
+
+    if (!this.headersBound) {
+      this.headersBound = true;
+      this.sharedSession.webRequest.onBeforeSendHeaders(
+        { urls: ['https://accounts.google.com/*', 'https://*.google.com/*'] },
+        (details, callback) => {
+          details.requestHeaders['Sec-Fetch-Dest'] = 'document';
+          details.requestHeaders['User-Agent'] = CHROME_USER_AGENT;
+          callback({ requestHeaders: details.requestHeaders });
+        }
+      );
     }
 
     if (!this.downloadsBound) {
