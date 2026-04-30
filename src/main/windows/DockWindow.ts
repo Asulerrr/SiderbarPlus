@@ -41,7 +41,7 @@ export class DockWindow {
       }
     });
 
-    this.window.setAlwaysOnTop(true, 'screen-saver');
+    this.window.setAlwaysOnTop(true, 'floating');
     this.window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
 
     // ready-to-show 可能在 AppBar 注册（收缩 work area）之后才触发。
@@ -69,7 +69,7 @@ export class DockWindow {
 
   show(): void {
     if (!this.window) return;
-    this.window.setAlwaysOnTop(true, 'screen-saver');
+    this.window.setAlwaysOnTop(true, 'floating');
     this.window.moveTop();
     this.assertPosition();
     this.window.showInactive();

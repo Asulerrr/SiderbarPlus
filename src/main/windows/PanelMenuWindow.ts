@@ -45,7 +45,7 @@ export class PanelMenuWindow {
       }
     });
 
-    this.window.setAlwaysOnTop(true, 'screen-saver');
+    this.window.setAlwaysOnTop(true, 'floating');
     this.window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     this.window.webContents.once('did-finish-load', () => {
       this.ready = true;
@@ -108,7 +108,7 @@ export class PanelMenuWindow {
       width: MENU_SIZE.width,
       height: MENU_SIZE.height
     });
-    this.window.setAlwaysOnTop(true, 'screen-saver');
+    this.window.setAlwaysOnTop(true, 'floating');
     this.window.moveTop();
     this.window.showInactive();
     this.window.webContents.send(IPC_CHANNELS.panelMenuHydrate, payload);

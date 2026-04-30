@@ -55,7 +55,7 @@ export class PanelWindow {
 
     this.window.setOpacity(0);
     this.window.setIgnoreMouseEvents(true, { forward: true });
-    this.window.setAlwaysOnTop(true, 'screen-saver');
+    this.window.setAlwaysOnTop(true, 'floating');
     this.window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     this.window.once('ready-to-show', () => {
       this.window?.showInactive();
@@ -79,7 +79,7 @@ export class PanelWindow {
   }
 
   show(): void {
-    this.window?.setAlwaysOnTop(true, 'screen-saver');
+    this.window?.setAlwaysOnTop(true, 'floating');
     this.window?.moveTop();
     this.assertPosition();
     this.window?.showInactive();

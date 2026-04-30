@@ -52,11 +52,17 @@ const loadUser32 = (): User32 | null => {
 // "前台窗口 == 显示器 bounds" 判断误判为全屏 → 触发 dock 隐藏。
 // 用户点击桌面、最小化所有窗口、Win+D 都会让这些壳窗口成为前台。
 const SHELL_WINDOW_CLASSES = new Set([
-  'Progman', // 桌面 Program Manager
-  'WorkerW', // 桌面壁纸 / 幻灯片背景
-  'Shell_TrayWnd', // 主任务栏
-  'Shell_SecondaryTrayWnd' // 副屏任务栏
+  'Progman',
+  'WorkerW',
+  'Shell_TrayWnd',
+  'Shell_SecondaryTrayWnd',
+  'ScreenClippingHost',
+  'SnippingToolHost',
+  'SnippingTool'
 ]);
+
+const ENTER_FULLSCREEN_CHECKS = 10;
+const EXIT_FULLSCREEN_CHECKS = 2;
 
 const readClassName = (user32: User32, hwnd: unknown): string | null => {
   try {
@@ -88,6 +94,8 @@ export class FullscreenWatcher {
   private user32: User32 | null = null;
   private excludedHandles = new Set<bigint>();
   private isFullscreenActive = false;
+  private fullscreenCount = 0;
+  private nonFullscreenCount = 0;
 
   constructor(
     private readonly onEnterFullscreen: () => void,
@@ -165,12 +173,20 @@ export class FullscreenWatcher {
         winBounds.x + winBounds.width >= display.bounds.x + display.bounds.width &&
         winBounds.y + winBounds.height >= display.bounds.y + display.bounds.height;
 
-      if (isFullscreen && !this.isFullscreenActive) {
-        this.isFullscreenActive = true;
-        this.onEnterFullscreen();
-      } else if (!isFullscreen && this.isFullscreenActive) {
-        this.isFullscreenActive = false;
-        this.onExitFullscreen();
+      if (isFullscreen) {
+        this.nonFullscreenCount = 0;
+        this.fullscreenCount += 1;
+        if (!this.isFullscreenActive && this.fullscreenCount >= ENTER_FULLSCREEN_CHECKS) {
+          this.isFullscreenActive = true;
+          this.onEnterFullscreen();
+        }
+      } else {
+        this.fullscreenCount = 0;
+        this.nonFullscreenCount += 1;
+        if (this.isFullscreenActive && this.nonFullscreenCount >= EXIT_FULLSCREEN_CHECKS) {
+          this.isFullscreenActive = false;
+          this.onExitFullscreen();
+        }
       }
     } catch (error) {
       logger.error('FullscreenWatcher.check failed', error);

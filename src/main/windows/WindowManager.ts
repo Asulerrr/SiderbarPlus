@@ -74,13 +74,6 @@ export class WindowManager {
     private readonly configStore: ConfigStore,
     private readonly forwardPanelState: (state: PanelState) => void
   ) {
-    // WM_SETTINGCHANGE / SPI_SETWORKAREA → Electron 触发此事件。
-    // AppBar 注册/更新会收缩 work area，Chromium 可能在收到该消息后
-    // 异步把 always-on-top 窗口 snap 进新 work area。
-    // 监听此事件，一旦触发就重断言所有可见窗口位置。
-    screen.on('display-metrics-changed', () => {
-      this.assertAllVisibleWindows();
-    });
   }
 
   private handlePanelState = (state: PanelState): void => {
@@ -145,9 +138,11 @@ export class WindowManager {
 
   hideForFullscreen(): void {
     this.dockVisibleBeforeFullscreen = this.isDockVisible();
+    this.panelManager?.forceCloseAndResetMode(
+      this.lastPanelState.edge,
+      this.config.layout.displayId
+    );
     this.dockWindow?.hide();
-    this.panelWindow?.hide();
-    this.panelMenuWindow?.hide();
   }
 
   restoreFromFullscreen(): void {
@@ -347,60 +342,12 @@ export class WindowManager {
     }
   }
 
-  /** 同步 panel AppBar 锚点。pinned + 有活跃 panel → 注册；否则 → 注销 */
+  /** panel 不再独立注册 AppBar——仅需确保窗口位置正确 */
   private async syncPanelAppBar(state: PanelState): Promise<void> {
     if (!this.appBarService.isAvailable()) return;
 
     if (state.panelMode === 'pinned' && state.activePanelId) {
-      const config = await this.configStore.read();
-      const refWin = this.dockWindow?.getBrowserWindow();
-      if (!refWin) return;
-
-      const descriptor = config.panels.find((p) => p.id === state.activePanelId);
-      const workAreaWidth = getTargetDisplay(config.layout.displayId).workArea.width;
-      const maxWidthPx = percentToPanelPx(
-        config.layout.panelDefaultWidth,
-        workAreaWidth
-      );
-      const panelWidthDip = getPreferredPanelWidth(
-        descriptor?.preferredWidth,
-        maxWidthPx,
-        workAreaWidth
-      );
-      const dockDip = getDockBounds(state.edge, config.layout.displayId);
-      const panelDip = getPanelBounds(state.edge, dockDip, panelWidthDip);
-
-      // 创建/更新隐藏锚点
-      if (this.panelAnchor && !this.panelAnchor.isDestroyed()) {
-        if (this.panelAnchorWidthDip !== panelWidthDip) {
-          this.panelAnchor.destroy();
-          this.panelAnchor = null;
-        }
-      }
-      if (!this.panelAnchor) {
-        this.panelAnchor = createAppBarAnchor(panelDip);
-        this.panelAnchorWidthDip = panelWidthDip;
-      }
-
-      const physical = screen.dipToScreenRect(refWin, panelDip);
-      const handle = this.panelAnchor.getNativeWindowHandle();
-      this.appBarService.register(PANEL_APPBAR_ID, handle, state.edge, {
-        x: physical.x,
-        y: physical.y,
-        width: physical.width,
-        height: physical.height
-      });
-      logger.info('Panel AppBar anchor registered', { panelDip, physical });
-
-      // AppBar 注册完毕。Windows 异步处理 work area 变更后可能推送
-      // always-on-top 窗口。不在当前 tick 断言——等 Windows 先完成重算，
-      // 避免"窗口被 Windows 推离 → 被我们拉回"的闪烁。
-      // force=true：Windows 可能在 work area 变更后才异步推送 always-on-top 窗口，
-      // 不能依赖 cachedWorkArea 检查（首次 display-metrics-changed 触发时窗口可能还
-      // 没被推走，后续 work area 未变会跳过）。强制断言确保最终位置正确。
-      setTimeout(() => this.assertAllVisibleWindows(true), 80);
-      setTimeout(() => this.assertAllVisibleWindows(true), 250);
-      setTimeout(() => this.assertAllVisibleWindows(true), 600);
+      this.assertAllVisibleWindows(true);
     } else {
       this.unregisterPanelAppBar();
     }
