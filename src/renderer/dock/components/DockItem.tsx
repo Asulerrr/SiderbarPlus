@@ -36,7 +36,12 @@ const buildIconSrc = (panel: PanelDescriptor): string | null => {
   }
 
   if (panel.iconSource.kind === 'auto' && panel.web?.url) {
-    return `https://www.google.com/s2/favicons?sz=64&domain_url=${encodeURIComponent(panel.web.url)}`;
+    try {
+      const host = new URL(panel.web.url).hostname;
+      return `https://icons.duckduckgo.com/ip3/${host}.ico`;
+    } catch {
+      return null;
+    }
   }
 
   return null;
@@ -78,7 +83,7 @@ export function DockItem({
           ? 'bg-white/12'
           : highlighted
             ? 'bg-accent/18'
-            : 'bg-transparent hover:bg-white/8'
+            : 'bg-transparent'
       } ${dragging ? 'cursor-grabbing' : 'cursor-pointer'}`}
       style={{ paddingLeft: iconPadLeft, paddingRight: 36 - 20 - iconPadLeft }}
     >

@@ -592,7 +592,7 @@ export default function App(): JSX.Element {
                 <button
                   type="button"
                   title="返回"
-                  className="-ml-2 flex h-8 w-8 shrink-0 items-center justify-center rounded text-white/72 hover:bg-white/8"
+                  className="-ml-2 flex h-8 w-8 shrink-0 items-center justify-center rounded text-white/72 hover:bg-white/30"
                   onClick={() => void handleGoBack()}
                 >
                   <ChevronLeft size={17} />
@@ -611,7 +611,7 @@ export default function App(): JSX.Element {
               <button
                 type="button"
                 title="在浏览器中打开"
-                className={`flex h-8 w-8 items-center justify-center rounded text-white/72 hover:bg-white/8 ${
+                className={`flex h-8 w-8 items-center justify-center rounded text-white/72 hover:bg-white/30 ${
                   chromeState.panelType === 'web' ? '' : 'pointer-events-none opacity-35'
                 }`}
                 onClick={() => void handleOpenExternal()}
@@ -622,7 +622,7 @@ export default function App(): JSX.Element {
                 ref={menuButtonRef}
                 type="button"
                 title="更多"
-                className={`flex h-8 w-8 items-center justify-center rounded text-white/72 hover:bg-white/8 ${
+                className={`flex h-8 w-8 items-center justify-center rounded text-white/72 hover:bg-white/30 ${
                   chromeState.panelType === 'web' ? '' : 'pointer-events-none opacity-35'
                 }`}
                 onMouseDown={(event) => {
@@ -646,7 +646,7 @@ export default function App(): JSX.Element {
               </button>
               <button
                 type="button"
-                className="flex h-8 w-8 items-center justify-center rounded text-white/72 hover:bg-white/8"
+                className="flex h-8 w-8 items-center justify-center rounded text-white/72 hover:bg-white/30"
                 title={chromeState.panelMode === 'pinned' ? '取消固定侧窗格' : '固定侧窗格'}
                 onClick={() => void window.panelAPI.togglePin()}
               >
@@ -654,14 +654,14 @@ export default function App(): JSX.Element {
               </button>
               <button
                 type="button"
-                className="flex h-8 w-8 items-center justify-center rounded text-white/72 hover:bg-white/8"
+                className="flex h-8 w-8 items-center justify-center rounded text-white/72 hover:bg-white/30"
                 onClick={() => void window.panelAPI.minimizePanel()}
               >
                 <Minus size={14} />
               </button>
               <button
                 type="button"
-                className="flex h-8 w-8 items-center justify-center rounded text-white/72 hover:bg-white/8"
+                className="flex h-8 w-8 items-center justify-center rounded text-white/72 hover:bg-white/30"
                 onClick={() => void window.panelAPI.closePanel()}
               >
                 <X size={14} />

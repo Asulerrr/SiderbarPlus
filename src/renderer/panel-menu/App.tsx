@@ -76,7 +76,7 @@ export default function App(): JSX.Element {
       <div className="rounded-lg border border-white/8 bg-[#2D2D2D] p-1 shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
         <button
           type="button"
-          className="flex h-8 w-full items-center gap-2 rounded-md px-3 text-left text-sm text-white transition-colors hover:bg-white/8"
+          className="flex h-8 w-full items-center gap-2 rounded-md px-3 text-left text-sm text-white transition-colors hover:bg-white/30"
           onClick={() => void handleAction('reload')}
         >
           <RotateCw size={14} className="text-white/72" />
@@ -84,7 +84,7 @@ export default function App(): JSX.Element {
         </button>
         <button
           type="button"
-          className="flex h-8 w-full items-center gap-2 rounded-md px-3 text-left text-sm text-white transition-colors hover:bg-white/8"
+          className="flex h-8 w-full items-center gap-2 rounded-md px-3 text-left text-sm text-white transition-colors hover:bg-white/30"
           onClick={() => void handleAction('copy-link')}
         >
           <LinkIcon size={14} className="text-white/72" />
@@ -92,7 +92,7 @@ export default function App(): JSX.Element {
         </button>
         <button
           type="button"
-          className="flex h-8 w-full items-center gap-2 rounded-md px-3 text-left text-sm text-white transition-colors hover:bg-white/8"
+          className="flex h-8 w-full items-center gap-2 rounded-md px-3 text-left text-sm text-white transition-colors hover:bg-white/30"
           onClick={() => void handleAction('toggle-mobile-view')}
         >
           <Smartphone size={14} className="text-white/72" />
@@ -101,7 +101,7 @@ export default function App(): JSX.Element {
         </button>
         <button
           type="button"
-          className="flex h-8 w-full items-center gap-2 rounded-md px-3 text-left text-sm text-white transition-colors hover:bg-white/8"
+          className="flex h-8 w-full items-center gap-2 rounded-md px-3 text-left text-sm text-white transition-colors hover:bg-white/30"
           onClick={() => void handleAction('toggle-notifications-snooze')}
         >
           <BellOff size={14} className="text-white/72" />
@@ -111,7 +111,7 @@ export default function App(): JSX.Element {
         <div className="my-1 h-px bg-white/8" />
         <button
           type="button"
-          className="flex h-8 w-full items-center gap-2 rounded-md px-3 text-left text-sm text-white transition-colors hover:bg-white/8"
+          className="flex h-8 w-full items-center gap-2 rounded-md px-3 text-left text-sm text-white transition-colors hover:bg-white/30"
           onClick={() => void handleAction('open-edit-site')}
         >
           <Pencil size={14} className="text-white/72" />
@@ -119,7 +119,7 @@ export default function App(): JSX.Element {
         </button>
         <button
           type="button"
-          className="flex h-8 w-full items-center gap-2 rounded-md px-3 text-left text-sm text-white transition-colors hover:bg-white/8"
+          className="flex h-8 w-full items-center gap-2 rounded-md px-3 text-left text-sm text-white transition-colors hover:bg-white/30"
           onClick={() => void handleAction('clear-site-data')}
         >
           <Trash2 size={14} className="text-white/72" />
@@ -127,7 +127,7 @@ export default function App(): JSX.Element {
         </button>
         <button
           type="button"
-          className="flex h-8 w-full items-center gap-2 rounded-md px-3 text-left text-sm text-white transition-colors hover:bg-white/8"
+          className="flex h-8 w-full items-center gap-2 rounded-md px-3 text-left text-sm text-white transition-colors hover:bg-white/30"
           onClick={() => void handleAction('open-site-info')}
         >
           <Info size={14} className="text-white/72" />

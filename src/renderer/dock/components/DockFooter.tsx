@@ -31,7 +31,7 @@ export function DockFooter({
           <button
             key={label}
             type="button"
-            className="flex h-[42px] w-[38px] items-center justify-center transition-colors hover:bg-white/6 mx-auto"
+            className="flex h-[32px] w-[30px] items-center justify-center rounded-lg transition-colors hover:bg-white/30 mx-auto"
             style={{ color: fgColor + '8F' }}
             title={label}
             onClick={onClick}

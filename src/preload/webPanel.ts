@@ -1,10 +1,9 @@
-import { ipcRenderer } from 'electron';
+import { ipcRenderer, webFrame } from 'electron';
 import { IPC_CHANNELS } from '../shared/ipc-contracts';
 
-// No navigator/webdriver/userAgentData modifications — Cloudflare
-// Turnstile detects tampered DOM properties and infinite-loops.
-// The Chromium-level flags (AutomationControlled, UserAgentClientHints,
-// FedCm) + Chrome UA handle server-side detection for all sites.
+// Lock cursor to default — prevents flicker between arrow and hand
+// as mouse moves over website content with varying cursor styles.
+webFrame.insertCSS('*,*::before,*::after,a,button,input,textarea,select,[role=button],[onclick]{cursor:default!important}');
 
 let lastCancelAt = 0;
 

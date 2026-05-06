@@ -112,6 +112,8 @@ export class WebPanelHost {
       defaultUserAgent: view.webContents.getUserAgent()
     });
 
+    view.webContents.insertCSS('*,*::before,*::after{cursor:default!important}');
+
     this.bindViewEvents(descriptor.id, view);
     this.applyViewPreferences(descriptor.id, view, descriptor.web);
 
