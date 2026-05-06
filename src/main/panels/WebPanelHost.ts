@@ -58,13 +58,12 @@ export class WebPanelHost {
         partition: SHARED_PARTITION,
         preload: join(__dirname, '../preload/webPanel.js'),
         nodeIntegration: false,
-        contextIsolation: false,
+        contextIsolation: true,
         sandbox: false,
         nativeWindowOpen: true
       } as any
     });
 
-    view.webContents.setUserAgent(CHROME_USER_AGENT);
     view.webContents.setBackgroundThrottling(false);
     view.webContents.setVisualZoomLevelLimits(1, 3).catch(() => undefined);
     view.webContents.setWindowOpenHandler(({ url, features }) => {
@@ -368,11 +367,15 @@ export class WebPanelHost {
         return;
       }
 
-      this.dependencies.emitNavigation({
-        panelId,
-        url: url || view.webContents.getURL(),
-        canGoBack: view.webContents.canGoBack()
-      });
+      try {
+        this.dependencies.emitNavigation({
+          panelId,
+          url: url || view.webContents.getURL(),
+          canGoBack: view.webContents.canGoBack()
+        });
+      } catch {
+        // emitNavigation may fail if PanelManager is mid-destroy
+      }
     };
 
     emit();

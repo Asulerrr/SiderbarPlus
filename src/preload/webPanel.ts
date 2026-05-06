@@ -1,64 +1,10 @@
 import { ipcRenderer } from 'electron';
 import { IPC_CHANNELS } from '../shared/ipc-contracts';
 
-// contextIsolation: false — preload runs in page world, synchronous.
-// Object.defineProperty takes effect before any page JS executes.
-const chromeVersion = process.versions.chrome;
-const major = chromeVersion.split('.')[0];
-
-Object.defineProperty(navigator, 'userAgentData', {
-  configurable: false,
-  writable: false,
-  value: {
-    brands: [
-      { brand: 'Not/A)Brand', version: '8' },
-      { brand: 'Chromium', version: major },
-      { brand: 'Google Chrome', version: major }
-    ],
-    mobile: false,
-    platform: 'Windows',
-    getHighEntropyValues: async () => ({
-      brands: [
-        { brand: 'Not/A)Brand', version: '8' },
-        { brand: 'Chromium', version: major },
-        { brand: 'Google Chrome', version: major }
-      ],
-      mobile: false,
-      platform: 'Windows',
-      platformVersion: '15.0.0',
-      architecture: 'x86',
-      bitness: '64',
-      uaFullVersion: chromeVersion,
-      fullVersionList: [
-        { brand: 'Not/A)Brand', version: '8.0.0.0' },
-        { brand: 'Chromium', version: chromeVersion },
-        { brand: 'Google Chrome', version: chromeVersion }
-      ]
-    })
-  }
-});
-
-window.chrome = {
-  runtime: {
-    sendMessage: () => {},
-    connect: () => ({
-      onMessage: { addListener: () => {} },
-      postMessage: () => {},
-      disconnect: () => {}
-    }),
-    onMessage: { addListener: () => {} },
-    onConnect: { addListener: () => {} },
-    lastError: undefined,
-    id: undefined
-  },
-  loadTimes: () => ({}),
-  csi: () => ({}),
-  app: {
-    isInstalled: false,
-    InstallState: { DISABLED: 'disabled', INSTALLED: 'installed', NOT_INSTALLED: 'not_installed' },
-    RunningState: { CANNOT_RUN: 'cannot_run', READY_TO_RUN: 'ready_to_run', RUNNING: 'running' }
-  }
-};
+// No navigator/webdriver/userAgentData modifications — Cloudflare
+// Turnstile detects tampered DOM properties and infinite-loops.
+// The Chromium-level flags (AutomationControlled, UserAgentClientHints,
+// FedCm) + Chrome UA handle server-side detection for all sites.
 
 let lastCancelAt = 0;
 
