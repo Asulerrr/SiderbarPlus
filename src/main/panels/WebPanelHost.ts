@@ -1,4 +1,4 @@
-import { app, clipboard, Notification, session, shell, WebContentsView } from 'electron';
+import { app, BrowserWindow, clipboard, Notification, session, shell, WebContentsView } from 'electron';
 import { spawn } from 'node:child_process';
 import { join } from 'node:path';
 import type {
@@ -384,6 +384,44 @@ export class WebPanelHost {
   }
 
   private bindViewEvents(panelId: string, view: WebContentsView): void {
+    // Google login pages don't use window.open — they navigate directly.
+    // Intercept and open in a popup with full anti-detection preload.
+    view.webContents.on('will-navigate', (event, url) => {
+      try {
+        if (new URL(url).hostname === 'accounts.google.com') {
+          event.preventDefault();
+          const popup = new BrowserWindow({
+            width: 520,
+            height: 600,
+            autoHideMenuBar: true,
+            backgroundColor: '#1B1B1B',
+            webPreferences: {
+              partition: this.partitions.get(panelId) ?? SHARED_PARTITION,
+              preload: join(__dirname, '../preload/webPanelPopup.js'),
+              nodeIntegration: false,
+              contextIsolation: false,
+              sandbox: false
+            }
+          });
+          popup.webContents.setUserAgent(CHROME_USER_AGENT);
+          popup.webContents.on('did-navigate', (_e, popupUrl) => {
+            try {
+              // Login complete — Google redirects away from accounts.google.com
+              if (new URL(popupUrl).hostname !== 'accounts.google.com') {
+                popup.close();
+              }
+            } catch { /* */ }
+          });
+          popup.on('closed', () => {
+            setTimeout(() => {
+              if (!view.webContents.isDestroyed()) view.webContents.reload();
+            }, 800);
+          });
+          popup.loadURL(url);
+        }
+      } catch { /* ignore */ }
+    });
+
     view.webContents.on('did-navigate', (_event, url) => {
       this.emitNavigationState(panelId, view, url);
     });

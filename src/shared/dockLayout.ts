@@ -5,8 +5,13 @@ export const getDockActiveIndicatorSide = (edge: Edge): 'left' | 'right' =>
 
 export const shouldShowDockActiveIndicator = ({
   activePanelId,
-  panelVisible
+  panelVisible,
+  panelMode
 }: {
   activePanelId: string | null;
   panelVisible: boolean;
-}): boolean => Boolean(activePanelId && panelVisible);
+  panelMode: string;
+}): boolean => {
+  if (panelMode === 'pinned' && activePanelId) return true;
+  return Boolean(activePanelId && panelVisible);
+};

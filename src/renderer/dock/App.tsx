@@ -170,7 +170,7 @@ export default function App(): JSX.Element {
     return (r * 0.299 + g * 0.587 + b * 0.114) > 128;
   }, [surface.bg]);
   const separatorColor = isLight ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.1)';
-  const activeIndicatorPanelId = shouldShowDockActiveIndicator(panelState)
+  const activeIndicatorPanelId = shouldShowDockActiveIndicator(panelState as any)
     ? panelState.activePanelId
     : null;
 
