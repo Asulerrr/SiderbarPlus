@@ -125,6 +125,7 @@ export default function App(): JSX.Element {
   const [contentSnapshotDataUrl, setContentSnapshotDataUrl] = useState<string | null>(null);
   const [addSiteUrl, setAddSiteUrl] = useState('');
   const [selectedBrowserId, setSelectedBrowserId] = useState('system');
+  const [isolatedSession, setIsolatedSession] = useState(false);
   const [customIconPath, setCustomIconPath] = useState<string | null>(null);
   const [autoFavicon, setAutoFavicon] = useState<FaviconFetchResult | null>(null);
   const [faviconLoading, setFaviconLoading] = useState(false);
@@ -189,6 +190,7 @@ export default function App(): JSX.Element {
   const resetSiteForm = (): void => {
     setAddSiteUrl('');
     setSelectedBrowserId('system');
+    setIsolatedSession(false);
     setCustomIconPath(null);
     setAutoFavicon(null);
     setFaviconLoading(false);
@@ -243,6 +245,7 @@ export default function App(): JSX.Element {
           setCustomIconPath(
             targetPanel.iconSource.kind === 'custom' ? targetPanel.iconSource.path ?? null : null
           );
+          setIsolatedSession(targetPanel.web?.isolatedSession ?? false);
         }
         return;
       case 'site-info':
@@ -501,7 +504,8 @@ export default function App(): JSX.Element {
               iconSource,
               web: {
                 url: normalizedUrl,
-                openInBrowser: selectedBrowserId
+                openInBrowser: selectedBrowserId,
+                isolatedSession
               }
             }
           })
@@ -515,7 +519,8 @@ export default function App(): JSX.Element {
               openInBrowser: selectedBrowserId,
               zoomFactor: 1,
               userAgentMode: 'desktop',
-              notificationsSnoozed: false
+              notificationsSnoozed: false,
+              isolatedSession
             }
           });
 
@@ -792,6 +797,19 @@ export default function App(): JSX.Element {
                       <p className="mt-2.5 border-l-2 pl-3 text-[12px] leading-relaxed tracking-cn" style={{ borderColor: colors.subtleBorder, color: colors.mutedText }}>
                         站内链接继续在侧边栏中打开。外开按钮会使用这里选择的浏览器。
                       </p>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        id="isolated-session"
+                        checked={isolatedSession}
+                        onChange={(e) => setIsolatedSession(e.target.checked)}
+                        className="h-4 w-4 accent-[#4CC2FF]"
+                      />
+                      <label htmlFor="isolated-session" className="text-[13px] tracking-cn" style={{ color: colors.mutedText }}>
+                        独立登录态（添加多个同站点时使用不同账号）
+                      </label>
                     </div>
                   </div>
                 </div>

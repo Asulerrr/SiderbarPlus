@@ -73,7 +73,8 @@ const buildDevTestPanels = () =>
       openInBrowser: 'system',
       zoomFactor: 1,
       userAgentMode: 'desktop' as const,
-      notificationsSnoozed: false
+      notificationsSnoozed: false,
+      isolatedSession: panel.id === 'dev-google'
     }
   }));
 

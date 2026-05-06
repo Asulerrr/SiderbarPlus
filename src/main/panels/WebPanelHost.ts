@@ -30,16 +30,15 @@ interface ViewMeta {
 export class WebPanelHost {
   private readonly views = new Map<string, WebContentsView>();
   private readonly meta = new Map<string, ViewMeta>();
+  private readonly partitions = new Map<string, string>();
   private readonly sharedSession = session.fromPartition(SHARED_PARTITION, { cache: true });
   private readonly browserService = new BrowserService();
   private currentConfig: AppConfig | null = null;
-  private downloadsBound = false;
-  private permissionsBound = false;
-  private headersBound = false;
+  private readonly sessionsWithHandlers = new Set<string>();
 
   constructor(private readonly dependencies: WebPanelHostDependencies) {
+    this.ensureSessionHandlers(SHARED_PARTITION);
     void this.refreshConfig();
-    this.bindSessionHandlers();
   }
 
   async refreshConfig(): Promise<void> {
@@ -47,15 +46,24 @@ export class WebPanelHost {
   }
 
   getOrCreateView(descriptor: PanelDescriptor): WebContentsView {
+    const partition = descriptor.web?.isolatedSession
+      ? `persist:panel-${descriptor.id}`
+      : SHARED_PARTITION;
+
     const existing = this.views.get(descriptor.id);
     if (existing) {
-      this.applyViewPreferences(descriptor.id, existing, descriptor.web);
-      return existing;
+      // Recreate view if session isolation setting changed
+      if (this.partitions.get(descriptor.id) !== partition) {
+        this.destroyView(descriptor.id);
+      } else {
+        this.applyViewPreferences(descriptor.id, existing, descriptor.web);
+        return existing;
+      }
     }
 
     const view = new WebContentsView({
       webPreferences: {
-        partition: SHARED_PARTITION,
+        partition,
         preload: join(__dirname, '../preload/webPanel.js'),
         nodeIntegration: false,
         contextIsolation: true,
@@ -63,6 +71,9 @@ export class WebPanelHost {
         nativeWindowOpen: true
       } as any
     });
+
+    this.partitions.set(descriptor.id, partition);
+    this.ensureSessionHandlers(partition);
 
     view.webContents.setBackgroundThrottling(false);
     view.webContents.setVisualZoomLevelLimits(1, 3).catch(() => undefined);
@@ -73,9 +84,6 @@ export class WebPanelHost {
         return { action: 'deny' };
       }
 
-      // Cross-origin OAuth popup → navigate main view instead.
-      // WebContentsView→BrowserWindow breaks window.opener, making
-      // popup-based OAuth impossible. Redirect mode avoids this.
       const currentOrigin = (() => {
         try { return new URL(view.webContents.getURL()).origin; } catch { return ''; }
       })();
@@ -92,7 +100,7 @@ export class WebPanelHost {
             autoHideMenuBar: true,
             backgroundColor: '#1B1B1B',
             webPreferences: {
-              partition: SHARED_PARTITION,
+              partition,
               preload: join(__dirname, '../preload/webPanelPopup.js'),
               nodeIntegration: false,
               contextIsolation: false,
@@ -110,7 +118,7 @@ export class WebPanelHost {
           autoHideMenuBar: true,
           backgroundColor: '#1B1B1B',
           webPreferences: {
-            partition: SHARED_PARTITION,
+            partition,
             preload: join(__dirname, '../preload/webPanelPopup.js'),
             nodeIntegration: false,
             contextIsolation: false,
@@ -126,12 +134,12 @@ export class WebPanelHost {
       const mainOrigin = (() => {
         try { return new URL(view.webContents.getURL()).origin; } catch { return ''; }
       })();
-      let oauthDone = false;
+      let isCrossOrigin = false;
       popup.webContents.on('did-navigate', (_e, u) => {
-        try { if (new URL(u).origin === mainOrigin) oauthDone = true; } catch { /* */ }
+        try { if (new URL(u).origin !== mainOrigin) isCrossOrigin = true; } catch { /* */ }
       });
       popup.on('closed', () => {
-        if (!oauthDone) return;
+        if (!isCrossOrigin) return;
         setTimeout(() => {
           if (!view.webContents.isDestroyed()) view.webContents.reload();
         }, 800);
@@ -347,6 +355,7 @@ export class WebPanelHost {
 
     this.views.delete(panelId);
     this.meta.delete(panelId);
+    this.partitions.delete(panelId);
   }
 
   private async getFreshConfig(): Promise<AppConfig> {
@@ -432,73 +441,48 @@ export class WebPanelHost {
     view.webContents.setZoomFactor(webConfig.zoomFactor || 1);
   }
 
-  private bindSessionHandlers(): void {
-    if (!this.permissionsBound) {
-      this.permissionsBound = true;
-      this.sharedSession.setPermissionCheckHandler((_webContents, permission, requestingOrigin) => {
-        if (permission !== 'notifications') {
-          return false;
+  private ensureSessionHandlers(partition: string): void {
+    if (this.sessionsWithHandlers.has(partition)) return;
+    this.sessionsWithHandlers.add(partition);
+
+    const ses = session.fromPartition(partition, { cache: true });
+
+    ses.setPermissionCheckHandler((_webContents, permission, requestingOrigin) => {
+      if (permission !== 'notifications') return false;
+      return this.isNotificationAllowed(requestingOrigin);
+    });
+
+    ses.setPermissionRequestHandler((webContents, permission, callback) => {
+      if (permission !== 'notifications') { callback(false); return; }
+      callback(this.isNotificationAllowed(webContents.getURL()));
+    });
+
+    ses.webRequest.onBeforeSendHeaders(
+      { urls: ['https://accounts.google.com/*', 'https://*.google.com/*', 'https://google.com/*'] },
+      (details, callback) => {
+        delete details.requestHeaders['Sec-Ch-Ua'];
+        delete details.requestHeaders['Sec-Ch-Ua-Mobile'];
+        delete details.requestHeaders['Sec-Ch-Ua-Platform'];
+        details.requestHeaders['Sec-Fetch-Dest'] = 'document';
+        details.requestHeaders['User-Agent'] = CHROME_USER_AGENT;
+        callback({ requestHeaders: details.requestHeaders });
+      }
+    );
+
+    ses.on('will-download', (_event, item) => {
+      const savePath = join(app.getPath('downloads'), item.getFilename());
+      item.setSavePath(savePath);
+      new Notification({ title: 'SideBar', body: `开始下载 ${item.getFilename()}` }).show();
+      item.once('done', (_downloadEvent, state) => {
+        if (state === 'completed') {
+          const n = new Notification({ title: 'SideBar', body: `${item.getFilename()} 下载完成` });
+          n.on('click', () => shell.showItemInFolder(savePath));
+          n.show();
+        } else {
+          new Notification({ title: 'SideBar', body: `${item.getFilename()} 下载失败` }).show();
         }
-
-        return this.isNotificationAllowed(requestingOrigin);
       });
-
-      this.sharedSession.setPermissionRequestHandler((webContents, permission, callback) => {
-        if (permission !== 'notifications') {
-          callback(false);
-          return;
-        }
-
-        callback(this.isNotificationAllowed(webContents.getURL()));
-      });
-    }
-
-    if (!this.headersBound) {
-      this.headersBound = true;
-      this.sharedSession.webRequest.onBeforeSendHeaders(
-        { urls: ['https://accounts.google.com/*', 'https://*.google.com/*', 'https://google.com/*'] },
-        (details, callback) => {
-          delete details.requestHeaders['Sec-Ch-Ua'];
-          delete details.requestHeaders['Sec-Ch-Ua-Mobile'];
-          delete details.requestHeaders['Sec-Ch-Ua-Platform'];
-          details.requestHeaders['Sec-Fetch-Dest'] = 'document';
-          details.requestHeaders['User-Agent'] = CHROME_USER_AGENT;
-          callback({ requestHeaders: details.requestHeaders });
-        }
-      );
-    }
-
-    if (!this.downloadsBound) {
-      this.downloadsBound = true;
-      this.sharedSession.on('will-download', (_event, item) => {
-        const savePath = join(app.getPath('downloads'), item.getFilename());
-        item.setSavePath(savePath);
-
-        new Notification({
-          title: 'SideBar',
-          body: `开始下载 ${item.getFilename()}`
-        }).show();
-
-        item.once('done', (_downloadEvent, state) => {
-          if (state === 'completed') {
-            const completedNotification = new Notification({
-              title: 'SideBar',
-              body: `${item.getFilename()} 下载完成`
-            });
-            completedNotification.on('click', () => {
-              shell.showItemInFolder(savePath);
-            });
-            completedNotification.show();
-            return;
-          }
-
-          new Notification({
-            title: 'SideBar',
-            body: `${item.getFilename()} 下载失败`
-          }).show();
-        });
-      });
-    }
+    });
   }
 
   private isNotificationAllowed(originOrUrl: string): boolean {

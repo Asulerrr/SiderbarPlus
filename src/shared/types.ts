@@ -8,6 +8,7 @@ export interface WebPanelConfig {
   zoomFactor: number;
   userAgentMode: 'desktop' | 'mobile';
   notificationsSnoozed?: boolean;
+  isolatedSession?: boolean;
 }
 
 export interface BuiltinPanelConfig {
