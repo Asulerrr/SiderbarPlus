@@ -10,14 +10,24 @@ const safeRemove = async (targetPath: string): Promise<void> => {
 };
 
 export const resetDevelopmentData = async (): Promise<void> => {
-  if (!process.env.ELECTRON_RENDERER_URL) {
+  const isDev = Boolean(process.env.ELECTRON_RENDERER_URL);
+
+  // Always clear session cache to prevent stale security state
+  // from interfering with login flows (Google, Cloudflare, etc.)
+  try {
+    const sharedSession = session.fromPartition(DEV_SHARED_PARTITION, { cache: true });
+    await sharedSession.clearCache();
+  } catch (error) {
+    logger.warn('Failed to clear shared session cache.', error);
+  }
+
+  if (!isDev) {
     return;
   }
 
-  // 默认只清 web 会话/缓存（保证开发期 web 端是干净的），
-  // **保留 config.json 与 icons**，这样用户在 dev 模式下添加的站点能跨重启保留。
-  // 需要回到带测试面板的默认配置时显式 SIDEBAR_PLUS_RESET_CONFIG=1。
-  const wipeConfig = process.env.SIDEBAR_PLUS_RESET_CONFIG === '1';
+  // 每次 dev 重启都用最新的 DEFAULT_CONFIG 覆盖旧配置，
+  // 确保 constants.ts 的改动立即生效。
+  const wipeConfig = true;
 
   const userDataPath = app.getPath('userData');
   // 注意：Windows NTFS 大小写不敏感，'Cache' 与 'cache' 解析为同一目录。

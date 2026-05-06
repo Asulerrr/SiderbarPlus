@@ -62,6 +62,7 @@ export const IPC_CHANNELS = {
   appToggleDockVisibility: 'app:toggle-dock-visibility',
   appOpenQuickMenu: 'app:open-quick-menu',
   appCycleDisplay: 'app:cycle-display',
+  dockWillShow: 'dock:will-show',
   panelState: 'panel:state',
   panelsUpdated: 'panels:updated',
   configChanged: 'config:changed',
@@ -103,6 +104,7 @@ export interface DockAPI {
   hideToTray: () => Promise<IpcResult<void>>;
   toggleDockVisibility: () => Promise<IpcResult<boolean>>;
   openQuickMenu: () => Promise<IpcResult<void>>;
+  onWillShow: (callback: () => void) => () => void;
   onPanelState: (callback: (state: PanelState) => void) => () => void;
   onPanelsUpdated: (callback: (payload: PanelsUpdatedPayload) => void) => () => void;
   onConfigChanged: (callback: (config: AppConfig) => void) => () => void;

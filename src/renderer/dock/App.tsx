@@ -7,7 +7,6 @@ import { DockFooter } from './components/DockFooter';
 import { DockIconList } from './components/DockIconList';
 
 export default function App(): JSX.Element {
-  // 覆盖 global.css 的 :root background，仅对 dock 窗口生效
   useEffect(() => {
     document.documentElement.style.background = 'transparent';
     return () => { document.documentElement.style.background = ''; };
@@ -23,8 +22,22 @@ export default function App(): JSX.Element {
   });
   const [highlightedPanelId, setHighlightedPanelId] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [entering, setEntering] = useState(true);
   const hoverTimerRef = useRef<number | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setEntering(false));
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(() => {
+    const dispose = window.dockAPI.onWillShow(() => {
+      setEntering(true);
+      requestAnimationFrame(() => setEntering(false));
+    });
+    return () => dispose();
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -165,7 +178,16 @@ export default function App(): JSX.Element {
     <main
       ref={rootRef}
       className="flex h-screen w-[44px] flex-col text-white"
-      style={{ backgroundColor: surface.bg, color: surface.fg }}
+      style={{
+        backgroundColor: surface.bg,
+        color: surface.fg,
+        transform: entering
+          ? `translateX(${edge === 'right' ? '44px' : '-44px'})`
+          : 'translateX(0)',
+        transition: entering
+          ? 'none'
+          : 'transform 280ms cubic-bezier(0.22, 0, 0, 1)'
+      }}
       onMouseEnter={() => {
         void window.dockAPI.cancelHide();
       }}

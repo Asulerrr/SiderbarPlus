@@ -1,10 +1,10 @@
 import { app, BrowserWindow, session } from 'electron';
 
-app.commandLine.appendSwitch('disable-features', 'UserAgentClientHints,FedCm,FedCmWithoutWellKnownEnforcement,FedCmIdpSigninStatus,FedCmButtonMode,FedCmMultipleIdentityProviders');
-app.commandLine.appendSwitch(
-  'user-agent',
-  `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${process.versions.chrome} Safari/537.36`
-);
+app.commandLine.appendSwitch('disable-features', 'UserAgentClientHint,UserAgentClientHints,FedCm,FedCmWithoutWellKnownEnforcement,FedCmIdpSigninStatus,FedCmButtonMode,FedCmMultipleIdentityProviders');
+
+const CHROME_UA = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${process.versions.chrome} Safari/537.36`;
+app.commandLine.appendSwitch('user-agent', CHROME_UA);
+app.userAgentFallback = CHROME_UA;
 import { join } from 'node:path';
 import { APP_ID, APP_NAME, BUILTIN_SETTINGS_ID } from '../shared/constants';
 import type { PanelState } from '../shared/types';

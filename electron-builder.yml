@@ -13,6 +13,8 @@ asarUnpack:
   - '**/node_modules/sharp/**'
   - '**/node_modules/@img/**'
   - icon/**
+  - 'out/preload/**'
+  - 'out/main/**'
 win:
   target:
     - target: nsis

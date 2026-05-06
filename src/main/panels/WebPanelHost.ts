@@ -84,8 +84,22 @@ export class WebPanelHost {
       })();
 
       if (isCrossOrigin) {
-        view.webContents.loadURL(url).catch(() => undefined);
-        return { action: 'deny' };
+        return {
+          action: 'allow',
+          overrideBrowserWindowOptions: {
+            width: 520,
+            height: 600,
+            autoHideMenuBar: true,
+            backgroundColor: '#1B1B1B',
+            webPreferences: {
+              partition: SHARED_PARTITION,
+              preload: join(__dirname, '../preload/webPanelPopup.js'),
+              nodeIntegration: false,
+              contextIsolation: false,
+              sandbox: false
+            }
+          }
+        };
       }
 
       return {
@@ -100,11 +114,28 @@ export class WebPanelHost {
             preload: join(__dirname, '../preload/webPanelPopup.js'),
             nodeIntegration: false,
             contextIsolation: false,
-            sandbox: false,
-            nativeWindowOpen: true
+            sandbox: false
           }
         }
       };
+    });
+
+    view.webContents.on('did-create-window', (popup) => {
+      popup.webContents.setUserAgent(CHROME_USER_AGENT);
+
+      const mainOrigin = (() => {
+        try { return new URL(view.webContents.getURL()).origin; } catch { return ''; }
+      })();
+      let oauthDone = false;
+      popup.webContents.on('did-navigate', (_e, u) => {
+        try { if (new URL(u).origin === mainOrigin) oauthDone = true; } catch { /* */ }
+      });
+      popup.on('closed', () => {
+        if (!oauthDone) return;
+        setTimeout(() => {
+          if (!view.webContents.isDestroyed()) view.webContents.reload();
+        }, 800);
+      });
     });
 
     this.views.set(descriptor.id, view);
@@ -425,8 +456,11 @@ export class WebPanelHost {
     if (!this.headersBound) {
       this.headersBound = true;
       this.sharedSession.webRequest.onBeforeSendHeaders(
-        { urls: ['https://accounts.google.com/*', 'https://*.google.com/*'] },
+        { urls: ['https://accounts.google.com/*', 'https://*.google.com/*', 'https://google.com/*'] },
         (details, callback) => {
+          delete details.requestHeaders['Sec-Ch-Ua'];
+          delete details.requestHeaders['Sec-Ch-Ua-Mobile'];
+          delete details.requestHeaders['Sec-Ch-Ua-Platform'];
           details.requestHeaders['Sec-Fetch-Dest'] = 'document';
           details.requestHeaders['User-Agent'] = CHROME_USER_AGENT;
           callback({ requestHeaders: details.requestHeaders });

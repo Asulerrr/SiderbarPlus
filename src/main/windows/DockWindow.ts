@@ -1,11 +1,13 @@
 import { BrowserWindow } from 'electron';
 import { join } from 'node:path';
+import { IPC_CHANNELS } from '../../shared/ipc-contracts';
 import type { AppConfig } from '../../shared/types';
 import { logger } from '../utils/logger';
 import { getDockBounds } from '../utils/display';
 
 export class DockWindow {
   private window: BrowserWindow | null = null;
+  private visible = false;
 
   constructor(private config: AppConfig) {}
 
@@ -49,6 +51,8 @@ export class DockWindow {
     // 因此显示后强制 setBounds 把 dock 钉回屏边。
     this.window.once('ready-to-show', () => {
       this.window?.showInactive();
+      this.window?.setIgnoreMouseEvents(!this.visible);
+      this.window?.setOpacity(this.visible ? 1 : 0);
       this.assertPosition();
     });
 
@@ -69,18 +73,24 @@ export class DockWindow {
 
   show(): void {
     if (!this.window) return;
+    this.visible = true;
     this.window.setAlwaysOnTop(true, 'floating');
+    this.window.setIgnoreMouseEvents(false);
     this.window.moveTop();
     this.assertPosition();
-    this.window.showInactive();
+    this.window.setOpacity(1);
+    this.window.webContents.send(IPC_CHANNELS.dockWillShow);
   }
 
   hide(): void {
-    this.window?.hide();
+    if (!this.window) return;
+    this.visible = false;
+    this.window.setOpacity(0);
+    this.window.setIgnoreMouseEvents(true);
   }
 
   isVisible(): boolean {
-    return this.window?.isVisible() ?? false;
+    return this.visible;
   }
 
   updateBounds(edge: AppConfig['layout']['edge'], displayId?: number): void {

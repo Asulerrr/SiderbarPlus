@@ -107,6 +107,7 @@ export class WindowManager {
 
     if (this.config.app.autoShowDock) {
       this.registerDockAppBar();
+      this.dockWindow?.show();
     }
     this.lastPanelState = { ...this.lastPanelState, edge: this.config.layout.edge };
   }
@@ -123,12 +124,12 @@ export class WindowManager {
     this.dockWindow?.hide();
     this.panelWindow?.hide();
     this.panelMenuWindow?.hide();
-    this.unregisterAllAppBars();
+    // Keep AppBar registered — prevents work area change when toggling,
+    // which would push the always-on-top dock and cause position drift.
   }
 
   showDockFromTray(): void {
     this.dockWindow?.show();
-    this.registerDockAppBar();
   }
 
   activateExistingInstance(): void {
@@ -334,12 +335,16 @@ export class WindowManager {
     });
     logger.info('Dock AppBar anchor registered', { dockDip });
 
-    // 锚点创建时已在正确位置，但 ABM_SETPOS 可能微调过它。把可见 dock
-    // 窗口也钉回屏边以确保视觉位置始终正确。
     const dockWin = this.dockWindow?.getBrowserWindow();
     if (dockWin && !dockWin.isDestroyed()) {
       dockWin.setBounds(dockDip);
     }
+
+    // Windows 异步处理 work area 变更后可能推送 always-on-top 窗口。
+    // 延迟断言确保 dock 不被推偏。
+    setTimeout(() => this.assertAllVisibleWindows(true), 80);
+    setTimeout(() => this.assertAllVisibleWindows(true), 250);
+    setTimeout(() => this.assertAllVisibleWindows(true), 600);
   }
 
   /** panel 不再独立注册 AppBar——仅需确保窗口位置正确 */

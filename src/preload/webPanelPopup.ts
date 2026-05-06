@@ -35,6 +35,19 @@ Object.defineProperty(navigator, 'userAgentData', {
   }
 });
 
+// Google OAuth checks window.opener — WebContentsView→BrowserWindow
+// leaves it null. Provide a fake opener so OAuth flow proceeds.
+// The actual auth token arrives via cookies in the shared session.
+if (!window.opener) {
+  Object.defineProperty(window, 'opener', {
+    get: () => ({
+      postMessage: () => {},
+      location: { href: '' }
+    }),
+    configurable: true
+  });
+}
+
 window.chrome = {
   runtime: {
     sendMessage: () => {},

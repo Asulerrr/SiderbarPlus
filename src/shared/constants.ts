@@ -6,7 +6,7 @@ export const APP_VERSION = '1.0.0';
 export const DOCK_WIDTH = 44;
 export const PANEL_DEFAULT_WIDTH = 50; // 屏幕宽度的百分比（30-100）
 export const DOCK_BACKGROUND = '#323232';
-export const DOCK_DEFAULT_OPACITY = 100;
+export const DOCK_DEFAULT_OPACITY = 30;
 export const BUILTIN_ADD_SITE_ID = 'builtin:add-site';
 export const BUILTIN_SETTINGS_ID = 'builtin:settings';
 export const BUILTIN_EDIT_SITE_PREFIX = 'builtin:edit-site:';
@@ -21,53 +21,39 @@ const DEV_TEST_PANELS = [
     fallbackColor: '#24292f'
   },
   {
-    id: 'dev-youtube',
-    title: 'YouTube',
-    url: 'https://www.youtube.com',
-    fallbackLetter: 'Y',
-    fallbackColor: '#ff0033'
-  },
-  {
     id: 'dev-bilibili',
-    title: 'Bilibili',
+    title: '哔哩哔哩',
     url: 'https://www.bilibili.com',
-    fallbackLetter: 'B',
-    fallbackColor: '#00a1d6'
+    fallbackLetter: '哔',
+    fallbackColor: '#FB7299'
   },
   {
-    id: 'dev-x',
-    title: 'X',
-    url: 'https://x.com',
-    fallbackLetter: 'X',
-    fallbackColor: '#111111'
+    id: 'dev-doubao',
+    title: '豆包',
+    url: 'https://www.doubao.com',
+    fallbackLetter: '豆',
+    fallbackColor: '#0052FF'
   },
   {
-    id: 'dev-reddit',
-    title: 'Reddit',
-    url: 'https://www.reddit.com',
-    fallbackLetter: 'R',
-    fallbackColor: '#ff4500'
+    id: 'dev-xiaohongshu',
+    title: '小红书',
+    url: 'https://www.xiaohongshu.com',
+    fallbackLetter: '红',
+    fallbackColor: '#FE2C55'
   },
   {
-    id: 'dev-figma',
-    title: 'Figma',
-    url: 'https://www.figma.com',
-    fallbackLetter: 'F',
-    fallbackColor: '#a259ff'
+    id: 'dev-claude',
+    title: 'Claude',
+    url: 'https://claude.ai',
+    fallbackLetter: 'C',
+    fallbackColor: '#D97706'
   },
   {
-    id: 'dev-notion',
-    title: 'Notion',
-    url: 'https://www.notion.so',
-    fallbackLetter: 'N',
-    fallbackColor: '#2f3437'
-  },
-  {
-    id: 'dev-gmail',
-    title: 'Gmail',
-    url: 'https://mail.google.com',
-    fallbackLetter: 'M',
-    fallbackColor: '#ea4335'
+    id: 'dev-google',
+    title: 'Google',
+    url: 'https://www.google.com',
+    fallbackLetter: 'G',
+    fallbackColor: '#4285F4'
   }
 ] as const;
 
@@ -77,7 +63,7 @@ const buildDevTestPanels = () =>
     type: 'web' as const,
     title: panel.title,
     iconSource: {
-      kind: 'letter' as const,
+      kind: 'auto' as const,
       fallbackLetter: panel.fallbackLetter,
       fallbackColor: panel.fallbackColor
     },
@@ -93,7 +79,6 @@ const buildDevTestPanels = () =>
 
 export const DEFAULT_CONFIG = (): AppConfig => {
   const now = new Date().toISOString();
-  const isDev = Boolean(process.env.ELECTRON_RENDERER_URL);
 
   return {
     schemaVersion: 1,
@@ -112,11 +97,11 @@ export const DEFAULT_CONFIG = (): AppConfig => {
       keepAudioOnHide: true
     },
     appearance: {
-      themeMode: 'system',
+      themeMode: 'transparent',
       customColor: '#1B1B1BFF',
       dockOpacity: DOCK_DEFAULT_OPACITY
     },
-    panels: isDev ? buildDevTestPanels() : [],
+    panels: buildDevTestPanels(),
     meta: {
       createdAt: now,
       lastUpdatedAt: now

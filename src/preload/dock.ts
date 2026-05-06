@@ -18,6 +18,11 @@ const dockAPI: DockAPI = {
   hideToTray: () => ipcRenderer.invoke(IPC_CHANNELS.appHideToTray),
   toggleDockVisibility: () => ipcRenderer.invoke(IPC_CHANNELS.appToggleDockVisibility),
   openQuickMenu: () => ipcRenderer.invoke(IPC_CHANNELS.appOpenQuickMenu),
+  onWillShow: (callback) => {
+    const listener = () => callback();
+    ipcRenderer.on(IPC_CHANNELS.dockWillShow, listener);
+    return () => { ipcRenderer.removeListener(IPC_CHANNELS.dockWillShow, listener); };
+  },
   onPanelState: (callback) => {
     const listener = (_event: Electron.IpcRendererEvent, state: Parameters<typeof callback>[0]) => {
       callback(state);
