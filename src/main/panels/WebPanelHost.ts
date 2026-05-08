@@ -78,6 +78,40 @@ export class WebPanelHost {
     view.webContents.setBackgroundThrottling(false);
     view.webContents.setVisualZoomLevelLimits(1, 3).catch(() => undefined);
     view.webContents.setWindowOpenHandler(({ url, features }) => {
+      // Google login — open popup directly instead of redirecting main view
+      try {
+        if (new URL(url).hostname === 'accounts.google.com') {
+          const popup = new BrowserWindow({
+            width: 520,
+            height: 600,
+            autoHideMenuBar: true,
+            backgroundColor: '#1B1B1B',
+            webPreferences: {
+              partition,
+              preload: join(__dirname, '../preload/webPanelPopup.js'),
+              nodeIntegration: false,
+              contextIsolation: false,
+              sandbox: false
+            }
+          });
+          popup.webContents.setUserAgent(CHROME_USER_AGENT);
+          popup.webContents.on('did-navigate', (_e, popupUrl) => {
+            try {
+              if (new URL(popupUrl).hostname !== 'accounts.google.com') {
+                popup.close();
+              }
+            } catch { /* */ }
+          });
+          popup.on('closed', () => {
+            setTimeout(() => {
+              if (!view.webContents.isDestroyed()) view.webContents.reload();
+            }, 800);
+          });
+          popup.loadURL(url);
+          return { action: 'deny' };
+        }
+      } catch { /* not a valid URL */ }
+
       const isDialog = /\bwidth\s*=\s*\d+|\bheight\s*=\s*\d+/i.test(features);
       if (!isDialog) {
         view.webContents.loadURL(url).catch(() => undefined);
