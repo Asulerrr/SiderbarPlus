@@ -10,13 +10,17 @@ export class PanelAnimationWindow {
   private lastPanelWidth: number;
   private lastEdge: AppConfig['layout']['edge'];
 
-  constructor(private readonly config: AppConfig) {
+  constructor(private config: AppConfig) {
     const widthPx = percentToPanelPx(
       config.layout.panelDefaultWidth,
       getTargetDisplay(config.layout.displayId).workArea.width
     );
     this.lastPanelWidth = widthPx;
     this.lastEdge = config.layout.edge;
+  }
+
+  updateConfig(config: AppConfig): void {
+    this.config = config;
   }
 
   create(): BrowserWindow {

@@ -578,7 +578,10 @@ export class PanelManager {
 
   private applyHoverConfig(config: AppConfig): void {
     this.edge = config.layout.edge;
-    this.displayId = config.layout.displayId;
+    // Use cursor position to detect which screen the user is interacting with.
+    // config.layout.displayId may be unset — defaults to primary.
+    this.displayId = config.layout.displayId ??
+      screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).id;
     this.hoverCloseDelayMs = config.behavior.hoverCloseDelayMs;
     const raw = config.layout.panelDefaultWidth;
     this.panelMaxWidthPercent = raw >= 25 && raw <= 100 ? raw : 50;

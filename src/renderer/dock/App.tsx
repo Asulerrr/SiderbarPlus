@@ -113,14 +113,9 @@ export default function App(): JSX.Element {
       window.clearTimeout(hoverTimerRef.current);
     }
 
-    if (panelState.activePanelId) {
-      void window.dockAPI.hoverPanel(id);
-      return;
-    }
-
     hoverTimerRef.current = window.setTimeout(() => {
       void window.dockAPI.hoverPanel(id);
-    }, config.behavior.hoverOpenDelayMs);
+    }, 200);
   };
 
   const handleActivatePanel = async (id: string): Promise<void> => {

@@ -1,4 +1,5 @@
 import type { AppConfig } from './types';
+import { DEFAULT_ICONS } from './defaultIcons';
 
 export const APP_ID = 'com.sidebar.app';
 export const APP_NAME = 'SideBar';
@@ -14,13 +15,6 @@ export const BUILTIN_SITE_INFO_PREFIX = 'builtin:site-info:';
 
 const DEV_TEST_PANELS = [
   {
-    id: 'dev-github',
-    title: 'GitHub',
-    url: 'https://github.com',
-    fallbackLetter: 'G',
-    fallbackColor: '#24292f'
-  },
-  {
     id: 'dev-bilibili',
     title: '哔哩哔哩',
     url: 'https://www.bilibili.com',
@@ -28,18 +22,18 @@ const DEV_TEST_PANELS = [
     fallbackColor: '#FB7299'
   },
   {
-    id: 'dev-doubao',
-    title: '豆包',
-    url: 'https://www.doubao.com',
-    fallbackLetter: '豆',
-    fallbackColor: '#0052FF'
-  },
-  {
     id: 'dev-xiaohongshu',
     title: '小红书',
     url: 'https://www.xiaohongshu.com',
     fallbackLetter: '红',
     fallbackColor: '#FE2C55'
+  },
+  {
+    id: 'dev-doubao',
+    title: '豆包',
+    url: 'https://www.doubao.com',
+    fallbackLetter: '豆',
+    fallbackColor: '#0052FF'
   },
   {
     id: 'dev-claude',
@@ -64,6 +58,7 @@ const buildDevTestPanels = () =>
     title: panel.title,
     iconSource: {
       kind: 'auto' as const,
+      dataUrl: DEFAULT_ICONS[panel.id],
       fallbackLetter: panel.fallbackLetter,
       fallbackColor: panel.fallbackColor
     },

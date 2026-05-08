@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { getDockActiveIndicatorSide } from '@shared/dockLayout';
 import { toRenderableIconUrl } from '@shared/iconUrl';
 import type { PanelDescriptor } from '@shared/types';
@@ -59,12 +59,37 @@ export function DockItem({
   onContextMenu
 }: DockItemProps): JSX.Element {
   const [iconFailed, setIconFailed] = useState(false);
+  const [retryTick, setRetryTick] = useState(0);
+  const retryTimerRef = useRef<number | null>(null);
   const iconSrc = buildIconSrc(panel);
   const activeIndicatorSide = getDockActiveIndicatorSide(edge);
 
   useEffect(() => {
     setIconFailed(false);
+    setRetryTick(0);
+    if (retryTimerRef.current) {
+      window.clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
   }, [panel.id, panel.iconSource.path, panel.iconSource.dataUrl, panel.web?.url]);
+
+  // auto 图标无 VPN 时加载失败 → 递增延迟重试（5s / 10s / 20s / 40s）
+  useEffect(() => {
+    if (!iconFailed || panel.iconSource.kind !== 'auto' || !panel.web?.url) {
+      return;
+    }
+    const delay = Math.min(5000 * Math.pow(2, retryTick), 40000);
+    retryTimerRef.current = window.setTimeout(() => {
+      setIconFailed(false);
+      setRetryTick((t) => t + 1);
+    }, delay);
+    return () => {
+      if (retryTimerRef.current) {
+        window.clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
+    };
+  }, [iconFailed, retryTick, panel.iconSource.kind, panel.web?.url]);
 
   // 图标在 44px dock 中居中；热区 36×36 距边缘左5/右3（或左3/右5）
   const iconPadLeft = edge === 'right' ? 9 : 7;
@@ -109,6 +134,7 @@ export function DockItem({
         ) : null}
         {iconSrc && !iconFailed ? (
           <img
+            key={`${panel.id}-${retryTick}`}
             src={iconSrc}
             alt={panel.title}
             draggable={false}

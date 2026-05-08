@@ -98,6 +98,25 @@ export class DockWindow {
     this.window.setBounds(getDockBounds(edge, displayId));
   }
 
+  /** opacity=0 → 重定位（OS 动画在透明期间完成）→ opacity=1 + CSS 滑入 */
+  reposition(edge: AppConfig['layout']['edge'], displayId?: number): void {
+    if (!this.window) return;
+    // 1. 透明隐藏（不用 BrowserWindow.hide()，避免 SW_HIDE 导致 showInactive 后状态异常）
+    this.window.setOpacity(0);
+    this.window.setIgnoreMouseEvents(true);
+    // 2. 重定位——OS 可能动画窗口位移，但 opacity=0 看不见
+    this.window.setBounds(getDockBounds(edge, displayId));
+    // 3. 延迟显示：等 OS 位移动画完成（Windows DWM ~150ms）
+    setTimeout(() => {
+      if (!this.window || this.window.isDestroyed()) return;
+      this.visible = true;
+      this.window.setAlwaysOnTop(true, 'floating');
+      this.window.setIgnoreMouseEvents(false);
+      this.window.setOpacity(1);
+      this.window.webContents.send(IPC_CHANNELS.dockWillShow);
+    }, 200);
+  }
+
   /** 强制把 dock 窗口钉回屏边（work area 收缩后 Windows 可能把它 snap 进去） */
   private assertPosition(): void {
     if (!this.window || this.window.isDestroyed()) return;

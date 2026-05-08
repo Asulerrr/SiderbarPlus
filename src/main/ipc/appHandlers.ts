@@ -138,18 +138,45 @@ export const registerAppHandlers = (
         windowManager.clearHideMute();
       });
 
-      // 菜单定位：边缘对齐 dock、底部对齐 ⋮ 按钮
-      const MENU_WIDTH_EST = 200;
-      const MENU_HEIGHT_EST = displays.length > 1 ? 162 : 134;
-      const BUTTON_BOTTOM_FROM_DOCK = 44; // pb-0.5(2px) + X按钮(42px)
+      // 菜单定位：锚定 menu 与 dock 同边缘、底部对齐 ⋮ 按钮
+      //
+      // ⋮ 按钮在 dock 中的位置（从底部往上）：
+      //   pb-0.5 = 2px padding-bottom
+      //   3 个按钮各 h-[32px]，gap-0
+      //   ⋮ 按钮底部距 dock 底部 = 2 + 32 + 32 = 66px
+      //
+      // Native menu：行高 24px，separator 10px，系统 padding ~10px。
+      const menuItemCount = 3 + (displays.length > 1 ? 1 : 0);
+      const MENU_ITEM_HEIGHT = 24;
+      const MENU_SEPARATOR_HEIGHT = 10;
+      const MENU_SYSTEM_PADDING = 10;
+      const MENU_HEIGHT = MENU_SYSTEM_PADDING + menuItemCount * MENU_ITEM_HEIGHT + MENU_SEPARATOR_HEIGHT;
+      const BUTTON_BOTTOM_FROM_DOCK = 66;
+
       const dockBounds = dockWindow?.getBounds();
+      if (!dockBounds) {
+        return { ok: false, error: 'Dock window not available' };
+      }
       const edge = config.layout.edge;
+
+      // window-relative 坐标：让 Electron 内部做 DIP→物理转换，与 dock 窗口同一基准。
+      // x=0 → menu 左边缘紧贴 dock 左边缘（右贴边时向右展开覆盖 dock 区域）。
+      // x=dockWidth → menu 左边缘紧贴 dock 右边缘（左贴边时向右展开）。
       const popupX =
         edge === 'right'
-          ? (dockBounds?.x ?? 0) - MENU_WIDTH_EST
-          : (dockBounds?.x ?? 0) + (dockBounds?.width ?? 44);
+          ? 0                    // menu 左边缘 = dock 左边缘
+          : (dockBounds.width);  // menu 左边缘 = dock 右边缘
       const popupY =
-        (dockBounds?.y ?? 0) + (dockBounds?.height ?? 0) - BUTTON_BOTTOM_FROM_DOCK - MENU_HEIGHT_EST;
+        dockBounds.height - BUTTON_BOTTOM_FROM_DOCK - MENU_HEIGHT;
+
+      logger.info('quick-menu popup', {
+        edge,
+        dockBounds,
+        menuHeight: MENU_HEIGHT,
+        popupX,
+        popupY,
+        displays: displays.length
+      });
 
       menu.popup({
         window: dockWindow,

@@ -155,19 +155,26 @@ export class WindowManager {
 
   applyEdgeChange(config: AppConfig): void {
     const edge = config.layout.edge;
-    const displayId = config.layout.displayId;
+    const displayId = config.layout.displayId ??
+      screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).id;
     this.config = config;
+    // Persist auto-detected displayId so registerDockAppBar uses the correct monitor
+    this.config.layout.displayId = displayId;
     this.panelManager?.forceCloseAndResetMode(edge, displayId);
+    // 先把新 edge 推送给 renderer，确保 dockWillShow 动画方向正确
+    this.lastPanelState = { ...this.lastPanelState, edge, panelMode: 'hover', activePanelId: null };
+    this.forwardPanelState(this.lastPanelState);
     this.dockWindow?.updateConfig(config);
-    this.dockWindow?.updateBounds(edge, displayId);
+    this.dockWindow?.reposition(edge, displayId);
     const maxWidthPx = percentToPanelPx(
       config.layout.panelDefaultWidth,
       getTargetDisplay(displayId).workArea.width
     );
+    this.panelWindow?.updateConfig(config);
     this.panelWindow?.updateBounds(edge, maxWidthPx, displayId);
+    this.panelAnimationWindow?.updateConfig(config);
     this.panelAnimationWindow?.updateBounds(edge, maxWidthPx, displayId);
     this.unregisterAllAppBars();
-    this.lastPanelState = { ...this.lastPanelState, edge, panelMode: 'hover', activePanelId: null };
     this.registerDockAppBar();
   }
 

@@ -18,6 +18,10 @@ export class PanelWindow {
     this.lastEdge = config.layout.edge;
   }
 
+  updateConfig(config: AppConfig): void {
+    this.config = config;
+  }
+
   create(): BrowserWindow {
     const dockBounds = getDockBounds(this.config.layout.edge, this.config.layout.displayId);
     const widthPx = percentToPanelPx(
