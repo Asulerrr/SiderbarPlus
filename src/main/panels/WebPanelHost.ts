@@ -95,12 +95,21 @@ export class WebPanelHost {
             }
           });
           popup.webContents.setUserAgent(CHROME_USER_AGENT);
+          // Don't close popup immediately — let callback page load and process auth code
+          let googleLoginDone = false;
           popup.webContents.on('did-navigate', (_e, popupUrl) => {
             try {
               if (new URL(popupUrl).hostname !== 'accounts.google.com') {
-                popup.close();
+                googleLoginDone = true;
               }
             } catch { /* */ }
+          });
+          popup.webContents.on('did-finish-load', () => {
+            if (!googleLoginDone) return;
+            // Callback page loaded — wait for SPA to process auth code, then close
+            setTimeout(() => {
+              if (!popup.isDestroyed()) popup.close();
+            }, 2000);
           });
           popup.on('closed', () => {
             setTimeout(() => {
@@ -440,13 +449,21 @@ export class WebPanelHost {
             }
           });
           popup.webContents.setUserAgent(CHROME_USER_AGENT);
+          // Don't close popup immediately — let callback page load and process auth code
+          let googleLoginDone = false;
           popup.webContents.on('did-navigate', (_e, popupUrl) => {
             try {
-              // Login complete — Google redirects away from accounts.google.com
               if (new URL(popupUrl).hostname !== 'accounts.google.com') {
-                popup.close();
+                googleLoginDone = true;
               }
             } catch { /* */ }
+          });
+          popup.webContents.on('did-finish-load', () => {
+            if (!googleLoginDone) return;
+            // Callback page loaded — wait for SPA to process auth code, then close
+            setTimeout(() => {
+              if (!popup.isDestroyed()) popup.close();
+            }, 2000);
           });
           popup.on('closed', () => {
             setTimeout(() => {
