@@ -19,6 +19,7 @@ import { WindowManager } from './windows/WindowManager';
 
 let windowManager: WindowManager | null = null;
 let trayManager: TrayManager | null = null;
+let configStoreRef: ConfigStore | null = null;
 
 // PRD §5.9.1：--autostart 参数代表静默启动（开机触发）。当前应用启动后 dock
 // 自动 showInactive，无欢迎弹窗，与正常启动无可见差异；保留参数解析与日志，
@@ -42,6 +43,7 @@ const bootstrap = async (): Promise<void> => {
   await resetDevelopmentData();
 
   const configStore = new ConfigStore();
+  configStoreRef = configStore;
   const config = await configStore.initialize();
 
   const autoLaunchService = new AutoLaunchService();
@@ -117,24 +119,25 @@ app.on('window-all-closed', () => {
   }
 });
 
-// 退出前注销 AppBar + 销毁所有窗口 + 持久化 cookies
+// 退出前注销 AppBar + 销毁所有窗口 + 持久化 cookies + 等待 config 写入
 app.on('before-quit', (event) => {
   windowManager?.disposeAppBar();
   BrowserWindow.getAllWindows().forEach((w) => {
     if (!w.isDestroyed()) w.destroy();
   });
-  // 阻止立即退出，等 cookie 刷盘 + Windows 处理 ABM_REMOVE 的 work area 恢复
+  // 阻止立即退出，等 config 写入 + cookie 刷盘 + Windows 处理 ABM_REMOVE 的 work area 恢复
   event.preventDefault();
-  session
-    .fromPartition('persist:shared', { cache: true })
-    .cookies.flushStore()
+  Promise.all([
+    configStoreRef?.waitForPendingWrites() ?? Promise.resolve(),
+    session.fromPartition('persist:shared', { cache: true }).cookies.flushStore()
+  ])
     .then(() => {
       // ABM_REMOVE 发送 WM_SETTINGCHANGE 给所有顶层窗口，其他应用需要时间
       // 接收并处理。立即 exit 会让 Windows 消息来不及投递，work area 残留。
-      setTimeout(() => app.exit(0), 300);
+      setTimeout(() => app.exit(0), 500);
     })
     .catch(() => {
-      setTimeout(() => app.exit(0), 300);
+      setTimeout(() => app.exit(0), 500);
     });
 });
 

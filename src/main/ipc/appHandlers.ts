@@ -86,6 +86,7 @@ export const registerAppHandlers = (
           click: async () => {
             try {
               const nextEdge = config.layout.edge === 'right' ? 'left' : 'right';
+              logger.info('quick-menu edge toggle', { from: config.layout.edge, to: nextEdge });
               const next = await configStore.update({
                 layout: { ...config.layout, edge: nextEdge }
               });
@@ -108,6 +109,7 @@ export const registerAppHandlers = (
                     if (typeof nextDisplayId !== 'number') {
                       return;
                     }
+                    logger.info('quick-menu display switch', { from: currentId, to: nextDisplayId });
                     const next = await configStore.update({
                       layout: { ...config.layout, displayId: nextDisplayId }
                     });

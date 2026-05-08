@@ -21,6 +21,11 @@ export class ConfigStore {
 
     const loaded = await this.readConfigWithFallback();
     this.config = await migrateConfig(loaded);
+    logger.info('Config initialized', {
+      edge: this.config.layout.edge,
+      displayId: this.config.layout.displayId,
+      configPath: getConfigPath()
+    });
     await this.persist(this.config);
     return this.config;
   }
@@ -38,6 +43,11 @@ export class ConfigStore {
     // 链上一次失败不阻塞后续 update
     this.writeChain = next.catch(() => undefined);
     return next;
+  }
+
+  /** 等待所有待处理的 config 写入完成（退出前调用） */
+  async waitForPendingWrites(): Promise<void> {
+    await this.writeChain.catch(() => undefined);
   }
 
   private async doUpdate(patch: Partial<AppConfig>): Promise<AppConfig> {
@@ -70,19 +80,33 @@ export class ConfigStore {
     };
 
     this.config = next;
+    logger.info('Config updated', {
+      edge: next.layout.edge,
+      displayId: next.layout.displayId
+    });
     await this.persist(next);
     return next;
   }
 
   private async readConfigWithFallback(): Promise<AppConfig> {
     try {
-      return await this.readFromPath(getConfigPath());
+      const config = await this.readFromPath(getConfigPath());
+      logger.info('Config loaded from config.json', {
+        edge: config.layout?.edge,
+        displayId: config.layout?.displayId
+      });
+      return config;
     } catch (error) {
       logger.warn('Failed to read config.json, attempting backup.', error);
     }
 
     try {
-      return await this.readFromPath(getConfigBackupPath());
+      const config = await this.readFromPath(getConfigBackupPath());
+      logger.info('Config loaded from backup', {
+        edge: config.layout?.edge,
+        displayId: config.layout?.displayId
+      });
+      return config;
     } catch (error) {
       logger.error('Failed to read config backup, using defaults.', error);
       return DEFAULT_CONFIG();
@@ -108,6 +132,11 @@ export class ConfigStore {
     // rename 命中 EPERM。给一次几十毫秒的重试通常能拿到。
     await this.renameWithRetry(persistPlan.writeTempTo, persistPlan.replaceTarget);
     await copyFile(persistPlan.copyBackupFrom, persistPlan.copyBackupTo);
+    logger.info('Config persisted', {
+      path: persistPlan.replaceTarget,
+      edge: config.layout.edge,
+      displayId: config.layout.displayId
+    });
   }
 
   private async renameWithRetry(from: string, to: string): Promise<void> {
