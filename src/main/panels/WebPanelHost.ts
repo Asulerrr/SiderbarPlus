@@ -157,7 +157,7 @@ export class WebPanelHost {
     this.applyViewPreferences(descriptor.id, view, descriptor.web);
 
     if (descriptor.web?.url) {
-      void this.sharedSession.cookies.flushStore();
+      void this.getPanelSession(descriptor.id).cookies.flushStore();
       view.webContents.loadURL(descriptor.web.url).catch((error) => {
         logger.warn(`Failed to load panel URL for ${descriptor.id}`, error);
       });
@@ -256,8 +256,9 @@ export class WebPanelHost {
     const currentUrl = this.getCurrentUrl(panelId, descriptor.web.url);
     const origin = new URL(currentUrl).origin;
 
-    await this.sharedSession.clearStorageData({ origin });
-    await this.sharedSession.cookies.flushStore();
+    const ses = this.getPanelSession(panelId);
+    await ses.clearStorageData({ origin });
+    await ses.cookies.flushStore();
     this.getView(panelId)?.webContents.reload();
 
     return this.getMenuState(panelId);
@@ -271,8 +272,9 @@ export class WebPanelHost {
     }
 
     const currentUrl = this.getCurrentUrl(panelId, descriptor.web.url);
-    const cookies = await this.sharedSession.cookies.get({ url: currentUrl }).catch(() => []);
-    const cacheSizeBytes = await this.sharedSession.getCacheSize().catch(() => 0);
+    const ses = this.getPanelSession(panelId);
+    const cookies = await ses.cookies.get({ url: currentUrl }).catch(() => []);
+    const cacheSizeBytes = await ses.getCacheSize().catch(() => 0);
 
     return {
       panelId,
@@ -521,6 +523,14 @@ export class WebPanelHost {
         }
       });
     });
+  }
+
+  private getPanelSession(panelId: string): Electron.Session {
+    const partition = this.partitions.get(panelId);
+    if (partition && partition !== SHARED_PARTITION) {
+      return session.fromPartition(partition, { cache: true });
+    }
+    return this.sharedSession;
   }
 
   private isNotificationAllowed(originOrUrl: string): boolean {
