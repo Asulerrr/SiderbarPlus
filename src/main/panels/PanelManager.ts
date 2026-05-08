@@ -622,7 +622,7 @@ export class PanelManager {
   }
 
   private checkPointerLocation(): void {
-    if (this.state === 'closed' || this.state === 'closing') {
+    if (this.state === 'closed') {
       this.pointerOutsideSince = null;
       return;
     }
@@ -643,8 +643,35 @@ export class PanelManager {
 
     if (now - this.pointerOutsideSince >= this.hoverCloseDelayMs) {
       this.pointerOutsideSince = null;
+      // If state is stuck in 'closing' (hidePanel returned early), force reset
+      if (this.state === 'closing') {
+        logger.info('Force-closing stuck panel');
+        this.forceClosePanel();
+        return;
+      }
       void this.hidePanel(false);
     }
+  }
+
+  /** Force close panel when hidePanel lifecycle was interrupted */
+  private forceClosePanel(): void {
+    this.cancelCloseTimer();
+    this.closeMenu();
+    if (this.currentPanelId) {
+      const view = this.webPanelHost.getView(this.currentPanelId);
+      if (view) {
+        view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
+      }
+    }
+    this.panelWindowRef.setOpacity(0);
+    this.panelWindowRef.setIgnoreMouseEvents(true, { forward: true });
+    this.hideAnimationWindow();
+    this.stopPointerTracking();
+    this.state = 'closed';
+    this.currentPanelId = null;
+    this.sticky = false;
+    this.pendingDestroyId = null;
+    this.emitState(this.edge, this.panelMode);
   }
 
   private isCursorInsideInteractiveArea(): boolean {
