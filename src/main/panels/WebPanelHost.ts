@@ -35,6 +35,7 @@ export class WebPanelHost {
   private readonly browserService = new BrowserService();
   private currentConfig: AppConfig | null = null;
   private readonly sessionsWithHandlers = new Set<string>();
+  private readonly popupWebContentsIds = new Set<number>();
 
   constructor(private readonly dependencies: WebPanelHostDependencies) {
     this.ensureSessionHandlers(SHARED_PARTITION);
@@ -81,42 +82,7 @@ export class WebPanelHost {
       // Google login — open popup directly instead of redirecting main view
       try {
         if (new URL(url).hostname === 'accounts.google.com') {
-          const popup = new BrowserWindow({
-            width: 520,
-            height: 600,
-            autoHideMenuBar: true,
-            backgroundColor: '#1B1B1B',
-            webPreferences: {
-              partition,
-              preload: join(__dirname, '../preload/webPanelPopup.js'),
-              nodeIntegration: false,
-              contextIsolation: false,
-              sandbox: false
-            }
-          });
-          popup.webContents.setUserAgent(CHROME_USER_AGENT);
-          // Don't close popup immediately — let callback page load and process auth code
-          let googleLoginDone = false;
-          popup.webContents.on('did-navigate', (_e, popupUrl) => {
-            try {
-              if (new URL(popupUrl).hostname !== 'accounts.google.com') {
-                googleLoginDone = true;
-              }
-            } catch { /* */ }
-          });
-          popup.webContents.on('did-finish-load', () => {
-            if (!googleLoginDone) return;
-            // Callback page loaded — wait for SPA to process auth code, then close
-            setTimeout(() => {
-              if (!popup.isDestroyed()) popup.close();
-            }, 2000);
-          });
-          popup.on('closed', () => {
-            setTimeout(() => {
-              if (!view.webContents.isDestroyed()) view.webContents.reload();
-            }, 800);
-          });
-          popup.loadURL(url);
+          this.openGoogleLoginPopup(url, partition, view);
           return { action: 'deny' };
         }
       } catch { /* not a valid URL */ }
@@ -429,53 +395,17 @@ export class WebPanelHost {
   }
 
   private bindViewEvents(panelId: string, view: WebContentsView): void {
-    // Google login pages don't use window.open — they navigate directly.
-    // Intercept and open in a popup with full anti-detection preload.
+    // will-navigate fallback — onBeforeRequest is the primary interception,
+    // but will-navigate catches cached navigations that skip the network layer.
     view.webContents.on('will-navigate', (event, url) => {
       try {
         if (new URL(url).hostname === 'accounts.google.com') {
           event.preventDefault();
-          // Restore main view content — preventDefault() leaves it in transitional state
-          const currentUrl = view.webContents.getURL();
-          if (currentUrl) {
-            view.webContents.loadURL(currentUrl).catch(() => undefined);
-          }
-          const popup = new BrowserWindow({
-            width: 520,
-            height: 600,
-            autoHideMenuBar: true,
-            backgroundColor: '#1B1B1B',
-            webPreferences: {
-              partition: this.partitions.get(panelId) ?? SHARED_PARTITION,
-              preload: join(__dirname, '../preload/webPanelPopup.js'),
-              nodeIntegration: false,
-              contextIsolation: false,
-              sandbox: false
-            }
-          });
-          popup.webContents.setUserAgent(CHROME_USER_AGENT);
-          // Don't close popup immediately — let callback page load and process auth code
-          let googleLoginDone = false;
-          popup.webContents.on('did-navigate', (_e, popupUrl) => {
-            try {
-              if (new URL(popupUrl).hostname !== 'accounts.google.com') {
-                googleLoginDone = true;
-              }
-            } catch { /* */ }
-          });
-          popup.webContents.on('did-finish-load', () => {
-            if (!googleLoginDone) return;
-            // Callback page loaded — wait for SPA to process auth code, then close
-            setTimeout(() => {
-              if (!popup.isDestroyed()) popup.close();
-            }, 2000);
-          });
-          popup.on('closed', () => {
-            setTimeout(() => {
-              if (!view.webContents.isDestroyed()) view.webContents.reload();
-            }, 800);
-          });
-          popup.loadURL(url);
+          this.openGoogleLoginPopup(
+            url,
+            this.partitions.get(panelId) ?? SHARED_PARTITION,
+            view
+          );
         }
       } catch { /* ignore */ }
     });
@@ -537,11 +467,89 @@ export class WebPanelHost {
     view.webContents.setZoomFactor(webConfig.zoomFactor || 1);
   }
 
+  private openGoogleLoginPopup(
+    url: string,
+    partition: string,
+    parentView: WebContentsView | null
+  ): BrowserWindow {
+    const popup = new BrowserWindow({
+      width: 520,
+      height: 600,
+      autoHideMenuBar: true,
+      backgroundColor: '#1B1B1B',
+      webPreferences: {
+        partition,
+        preload: join(__dirname, '../preload/webPanelPopup.js'),
+        nodeIntegration: false,
+        contextIsolation: false,
+        sandbox: false
+      }
+    });
+
+    // Track popup so onBeforeRequest allows its Google requests through
+    this.popupWebContentsIds.add(popup.webContents.id);
+    popup.on('closed', () => {
+      this.popupWebContentsIds.delete(popup.webContents.id);
+      if (parentView && !parentView.webContents.isDestroyed()) {
+        setTimeout(() => parentView.webContents.reload(), 800);
+      }
+    });
+
+    popup.webContents.setUserAgent(CHROME_USER_AGENT);
+
+    // Don't close popup immediately — let callback page load and process auth code
+    let googleLoginDone = false;
+    popup.webContents.on('did-navigate', (_e, popupUrl) => {
+      try {
+        if (new URL(popupUrl).hostname !== 'accounts.google.com') {
+          googleLoginDone = true;
+        }
+      } catch { /* */ }
+    });
+    popup.webContents.on('did-finish-load', () => {
+      if (!googleLoginDone) return;
+      // Callback page loaded — wait for SPA to process auth code, then close
+      setTimeout(() => {
+        if (!popup.isDestroyed()) popup.close();
+      }, 2000);
+    });
+
+    popup.loadURL(url);
+    return popup;
+  }
+
   private ensureSessionHandlers(partition: string): void {
     if (this.sessionsWithHandlers.has(partition)) return;
     this.sessionsWithHandlers.add(partition);
 
     const ses = session.fromPartition(partition, { cache: true });
+
+    // Intercept main-frame navigations to Google login BEFORE page loads.
+    // Unlike will-navigate, this fires at the HTTP request level, so the page
+    // never starts loading the Google URL (no error flash).
+    // Popup windows are tracked separately so their Google requests pass through.
+    ses.webRequest.onBeforeRequest(
+      { urls: ['https://accounts.google.com/*'] },
+      (details, callback) => {
+        if (
+          details.resourceType === 'mainFrame' &&
+          !this.popupWebContentsIds.has(details.webContents.id)
+        ) {
+          this.openGoogleLoginPopup(
+            details.url,
+            partition,
+            this.views.get(
+              [...this.views.entries()].find(
+                ([, v]) => v.webContents.id === details.webContents.id
+              )?.[0] ?? ''
+            ) ?? null
+          );
+          callback({ cancel: true });
+          return;
+        }
+        callback({});
+      }
+    );
 
     ses.setPermissionCheckHandler((_webContents, permission, requestingOrigin) => {
       if (permission !== 'notifications') return false;
