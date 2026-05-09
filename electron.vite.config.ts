@@ -24,6 +24,7 @@ export default defineConfig({
           panelAnimation: resolve(__dirname, 'src/preload/panelAnimation.ts'),
           webPanel: resolve(__dirname, 'src/preload/webPanel.ts'),
           webPanelPopup: resolve(__dirname, 'src/preload/webPanelPopup.ts'),
+          googleLogin: resolve(__dirname, 'src/preload/googleLogin.ts'),
           builtin: resolve(__dirname, 'src/preload/builtin.ts')
         }
       }

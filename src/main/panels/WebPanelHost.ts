@@ -31,6 +31,7 @@ export class WebPanelHost {
   private readonly views = new Map<string, WebContentsView>();
   private readonly meta = new Map<string, ViewMeta>();
   private readonly partitions = new Map<string, string>();
+  private readonly lastGoodUrls = new Map<string, string>();
   private readonly sharedSession = session.fromPartition(SHARED_PARTITION, { cache: true });
   private readonly browserService = new BrowserService();
   private currentConfig: AppConfig | null = null;
@@ -79,11 +80,27 @@ export class WebPanelHost {
     view.webContents.setBackgroundThrottling(false);
     view.webContents.setVisualZoomLevelLimits(1, 3).catch(() => undefined);
     view.webContents.setWindowOpenHandler(({ url, features }) => {
-      // Google login — open popup directly instead of redirecting main view
+      // Google login — allow popup to open naturally so window.open() returns
+      // a real reference (site JS won't show error). Preload only spoofs UA
+      // data and leaves window.opener intact for the OAuth callback.
       try {
         if (new URL(url).hostname === 'accounts.google.com') {
-          this.openGoogleLoginPopup(url, partition, view);
-          return { action: 'deny' };
+          return {
+            action: 'allow',
+            overrideBrowserWindowOptions: {
+              width: 520,
+              height: 600,
+              autoHideMenuBar: true,
+              backgroundColor: '#1B1B1B',
+              webPreferences: {
+                partition,
+                preload: join(__dirname, '../preload/googleLogin.js'),
+                nodeIntegration: false,
+                contextIsolation: false,
+                sandbox: false
+              }
+            }
+          };
         }
       } catch { /* not a valid URL */ }
 
@@ -140,15 +157,53 @@ export class WebPanelHost {
     view.webContents.on('did-create-window', (popup) => {
       popup.webContents.setUserAgent(CHROME_USER_AGENT);
 
+      // Capture ID immediately — popup.webContents is inaccessible after destroy
+      const popupId = popup.webContents.id;
+      const popupSession = popup.webContents.session;
+
+      // Track popup so onBeforeRequest allows its Google requests through
+      this.popupWebContentsIds.add(popupId);
+      popup.on('closed', () => {
+        this.popupWebContentsIds.delete(popupId);
+      });
+
       const mainOrigin = (() => {
         try { return new URL(view.webContents.getURL()).origin; } catch { return ''; }
       })();
       let isCrossOrigin = false;
+      let isGoogleLogin = false;
+
       popup.webContents.on('did-navigate', (_e, u) => {
-        try { if (new URL(u).origin !== mainOrigin) isCrossOrigin = true; } catch { /* */ }
+        try {
+          const parsed = new URL(u);
+          if (parsed.origin !== mainOrigin) isCrossOrigin = true;
+          // Detect when Google login navigates away to callback URL
+          if (parsed.hostname !== 'accounts.google.com') {
+            isGoogleLogin = true;
+          }
+        } catch { /* */ }
       });
+
+      popup.webContents.on('did-finish-load', () => {
+        if (!isGoogleLogin) return;
+        // Callback page loaded — wait for SPA to fully process auth code
+        // (exchange code → set cookie → redirect).
+        setTimeout(async () => {
+          if (popup.isDestroyed()) return;
+          // Flush cookies with timeout guard — flushStore() can hang
+          try {
+            await Promise.race([
+              popupSession.cookies.flushStore(),
+              new Promise(r => setTimeout(r, 3000))
+            ]);
+          } catch { /* */ }
+          popup.close();
+        }, 8000);
+      });
+
       popup.on('closed', () => {
-        if (!isCrossOrigin) return;
+        if (!isCrossOrigin && !isGoogleLogin) return;
+        // Reload parent so it picks up auth cookies set by the popup
         setTimeout(() => {
           if (!view.webContents.isDestroyed()) view.webContents.reload();
         }, 800);
@@ -367,6 +422,7 @@ export class WebPanelHost {
     this.views.delete(panelId);
     this.meta.delete(panelId);
     this.partitions.delete(panelId);
+    this.lastGoodUrls.delete(panelId);
   }
 
   private async getFreshConfig(): Promise<AppConfig> {
@@ -401,6 +457,11 @@ export class WebPanelHost {
       try {
         if (new URL(url).hostname === 'accounts.google.com') {
           event.preventDefault();
+          // Restore page immediately — preventDefault() may leave it in broken state
+          const restoreUrl = this.lastGoodUrls.get(panelId);
+          if (restoreUrl) {
+            view.webContents.loadURL(restoreUrl).catch(() => undefined);
+          }
           this.openGoogleLoginPopup(
             url,
             this.partitions.get(panelId) ?? SHARED_PARTITION,
@@ -411,11 +472,21 @@ export class WebPanelHost {
     });
 
     view.webContents.on('did-navigate', (_event, url) => {
+      try {
+        if (new URL(url).hostname !== 'accounts.google.com') {
+          this.lastGoodUrls.set(panelId, url);
+        }
+      } catch { /* */ }
       this.emitNavigationState(panelId, view, url);
     });
 
     view.webContents.on('did-navigate-in-page', (_event, url, isMainFrame) => {
       if (isMainFrame) {
+        try {
+          if (new URL(url).hostname !== 'accounts.google.com') {
+            this.lastGoodUrls.set(panelId, url);
+          }
+        } catch { /* */ }
         this.emitNavigationState(panelId, view, url);
       }
     });
@@ -479,17 +550,21 @@ export class WebPanelHost {
       backgroundColor: '#1B1B1B',
       webPreferences: {
         partition,
-        preload: join(__dirname, '../preload/webPanelPopup.js'),
+        preload: join(__dirname, '../preload/googleLogin.js'),
         nodeIntegration: false,
         contextIsolation: false,
         sandbox: false
       }
     });
 
+    // Capture ID/session immediately — popup.webContents is inaccessible after destroy
+    const popupId = popup.webContents.id;
+    const popupSession = popup.webContents.session;
+
     // Track popup so onBeforeRequest allows its Google requests through
-    this.popupWebContentsIds.add(popup.webContents.id);
+    this.popupWebContentsIds.add(popupId);
     popup.on('closed', () => {
-      this.popupWebContentsIds.delete(popup.webContents.id);
+      this.popupWebContentsIds.delete(popupId);
       if (parentView && !parentView.webContents.isDestroyed()) {
         setTimeout(() => parentView.webContents.reload(), 800);
       }
@@ -508,10 +583,17 @@ export class WebPanelHost {
     });
     popup.webContents.on('did-finish-load', () => {
       if (!googleLoginDone) return;
-      // Callback page loaded — wait for SPA to process auth code, then close
-      setTimeout(() => {
-        if (!popup.isDestroyed()) popup.close();
-      }, 2000);
+      // Callback page loaded — wait for SPA to fully process auth code
+      setTimeout(async () => {
+        if (popup.isDestroyed()) return;
+        try {
+          await Promise.race([
+            popupSession.cookies.flushStore(),
+            new Promise(r => setTimeout(r, 3000))
+          ]);
+        } catch { /* */ }
+        popup.close();
+      }, 8000);
     });
 
     popup.loadURL(url);
