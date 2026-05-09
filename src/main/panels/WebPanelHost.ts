@@ -435,6 +435,11 @@ export class WebPanelHost {
       try {
         if (new URL(url).hostname === 'accounts.google.com') {
           event.preventDefault();
+          // Restore main view content — preventDefault() leaves it in transitional state
+          const currentUrl = view.webContents.getURL();
+          if (currentUrl) {
+            view.webContents.loadURL(currentUrl).catch(() => undefined);
+          }
           const popup = new BrowserWindow({
             width: 520,
             height: 600,
