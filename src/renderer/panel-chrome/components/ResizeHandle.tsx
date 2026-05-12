@@ -84,7 +84,7 @@ export const ResizeHandle: React.FC<Props> = ({ edge }) => {
           position: 'absolute',
           top: 0,
           bottom: 0,
-          width: 1,
+          width: 2,
           background: '#6c63ff',
           opacity: isHovered ? 0.8 : 0,
           transition: 'opacity 0.15s ease',
