@@ -48,6 +48,7 @@ export class PanelManager {
   private pointerOutsideSince: number | null = null;
   private lifecycleToken = 0;
   private switchToken = 0;
+  private showPanelToken = 0;
   private sticky = false;
   // dock 底部 ⋮ 弹出原生 Menu.popup 期间冻结隐藏逻辑。原生菜单没有 BrowserWindow，
   // isCursorInsideInteractiveArea 的几何检测会把它判为"光标已离开 dock"。
@@ -105,8 +106,12 @@ export class PanelManager {
   }
 
   async showPanel(panelId: string, sticky = false): Promise<void> {
+    const showToken = ++this.showPanelToken;
     const config = await this.configStore.read();
     await this.webPanelHost.refreshConfig();
+    if (showToken !== this.showPanelToken) {
+      return;
+    }
     const descriptor = this.getDescriptor(config, panelId);
     if (!descriptor) {
       return;

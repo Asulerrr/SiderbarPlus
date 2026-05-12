@@ -232,13 +232,12 @@ export function DockIconList({
   };
 
   const handleItemHover = (panelId: string): void => {
-    // ref 同步检查，避免 state 延迟导致拖拽时 hover 穿透
-    if (dragStartedRef.current) return;
+    if (dragStartedRef.current || pressedPanelIdRef.current) return;
     onHover(panelId);
   };
 
   const handleItemActivate = (panelId: string): void => {
-    if (dragStartedRef.current) return;
+    if (dragStartedRef.current || pressedPanelIdRef.current) return;
     onActivate(panelId);
   };
 
