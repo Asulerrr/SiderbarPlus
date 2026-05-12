@@ -8,14 +8,12 @@ import {
   Smartphone,
   Trash2
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { PanelMenuOpenPayload, PanelMenuState } from '@shared/types';
 
 export default function App(): JSX.Element {
   const [payload, setPayload] = useState<PanelMenuOpenPayload | null>(null);
   const [state, setState] = useState<PanelMenuState | null>(null);
-  const [showCopyToast, setShowCopyToast] = useState(false);
-  const copyToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const disposeHydrate = window.panelMenuAPI.onHydrate((nextPayload) => {
@@ -56,17 +54,9 @@ export default function App(): JSX.Element {
 
     if (result.ok) {
       setState(result.data);
-      if (action === 'copy-link') {
-        if (copyToastTimerRef.current) clearTimeout(copyToastTimerRef.current);
-        setShowCopyToast(true);
-        copyToastTimerRef.current = setTimeout(async () => {
-          setShowCopyToast(false);
-          await window.panelMenuAPI.closeMenuAndResumeHover();
-        }, 2000);
-        return;
-      }
       if (
         action === 'reload' ||
+        action === 'copy-link' ||
         action === 'open-edit-site' ||
         action === 'clear-site-data' ||
         action === 'open-site-info'
@@ -83,27 +73,6 @@ export default function App(): JSX.Element {
         void window.panelMenuAPI.closeMenu();
       }}
     >
-      {showCopyToast ? (
-        <div
-          style={{
-            position: 'fixed',
-            top: 8,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            background: '#4ade80',
-            color: '#000',
-            fontSize: 12,
-            fontWeight: 600,
-            padding: '4px 14px',
-            borderRadius: 20,
-            zIndex: 1000,
-            whiteSpace: 'nowrap',
-            pointerEvents: 'none'
-          }}
-        >
-          ✓ 链接已复制
-        </div>
-      ) : null}
       <div className="rounded-lg border border-white/8 bg-[#2D2D2D] p-1 shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
         <button
           type="button"

@@ -139,6 +139,8 @@ export default function App(): JSX.Element {
   const [loadingVisible, setLoadingVisible] = useState(false);
   const [loadingDone, setLoadingDone] = useState(false);
   const loadingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [showCopyToast, setShowCopyToast] = useState(false);
+  const copyToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hydrationTokenRef = useRef(0);
   const panelCardRadius = chromeState.edge === 'right' ? 'rounded-l-lg' : 'rounded-r-lg';
   const panelCardBorder = chromeState.edge === 'right' ? 'border-r-0' : 'border-l-0';
@@ -371,6 +373,14 @@ export default function App(): JSX.Element {
       }
     });
 
+    const disposeCopyToast = window.panelAPI.onCopyToast(() => {
+      if (copyToastTimerRef.current) clearTimeout(copyToastTimerRef.current);
+      setShowCopyToast(true);
+      copyToastTimerRef.current = setTimeout(() => {
+        setShowCopyToast(false);
+      }, 2000);
+    });
+
     const disposePanelState = window.panelAPI.onPanelState((state) => {
       setChromeState((prev) =>
         prev.panelMode === state.panelMode ? prev : { ...prev, panelMode: state.panelMode }
@@ -392,6 +402,7 @@ export default function App(): JSX.Element {
       disposeFadeIn();
       disposeNavigation();
       disposeLoading();
+      disposeCopyToast();
       disposePanelState();
       disposeConfigChanged();
     };
@@ -618,6 +629,27 @@ export default function App(): JSX.Element {
               className={`loading-bar${loadingDone ? ' loading-bar--done' : ''}`}
               style={{ width: `${loadingWidth}%` }}
             />
+          ) : null}
+          {showCopyToast ? (
+            <div
+              style={{
+                position: 'absolute',
+                top: 56,
+                left: '50%',
+                transform: 'translateX(-50%)',
+                background: '#4ade80',
+                color: '#000',
+                fontSize: 12,
+                fontWeight: 600,
+                padding: '4px 14px',
+                borderRadius: 20,
+                zIndex: 300,
+                whiteSpace: 'nowrap',
+                pointerEvents: 'none'
+              }}
+            >
+              ✓ 链接已复制
+            </div>
           ) : null}
           <div
             className={`flex h-[76px] shrink-0 items-center justify-between px-4 transition-opacity duration-100 ${

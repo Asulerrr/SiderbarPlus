@@ -341,8 +341,13 @@ export class PanelManager {
     switch (action) {
       case 'reload':
         return this.webPanelHost.reload(panelId);
-      case 'copy-link':
-        return this.webPanelHost.copyLink(panelId);
+      case 'copy-link': {
+        const result = await this.webPanelHost.copyLink(panelId);
+        if (result && !this.panelWindowRef.isDestroyed()) {
+          this.panelWindowRef.webContents.send(IPC_CHANNELS.panelCopyToast);
+        }
+        return result;
+      }
       case 'toggle-mobile-view':
         return this.webPanelHost.toggleMobileView(panelId);
       case 'toggle-notifications-snooze':
