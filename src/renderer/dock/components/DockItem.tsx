@@ -78,6 +78,10 @@ export function DockItem({
     if (!iconFailed || panel.iconSource.kind !== 'auto' || !panel.web?.url) {
       return;
     }
+    // 最多重试 5 次，之后保持字母 fallback
+    if (retryTick >= 5) {
+      return;
+    }
     const delay = Math.min(5000 * Math.pow(2, retryTick), 40000);
     retryTimerRef.current = window.setTimeout(() => {
       setIconFailed(false);
