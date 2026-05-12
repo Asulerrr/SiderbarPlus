@@ -140,8 +140,13 @@ export default function App(): JSX.Element {
   const [loadingDone, setLoadingDone] = useState(false);
   const loadingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const panelIdRef = useRef<string | null>(chromeState.panelId);
-  const [showCopyToast, setShowCopyToast] = useState(false);
-  const copyToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showToast = (message: string, type: 'success' | 'error' | 'info') => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setToast({ message, type });
+    toastTimerRef.current = setTimeout(() => setToast(null), 2000);
+  };
   const hydrationTokenRef = useRef(0);
   const panelCardRadius = chromeState.edge === 'right' ? 'rounded-l-lg' : 'rounded-r-lg';
   const panelCardBorder = chromeState.edge === 'right' ? 'border-r-0' : 'border-l-0';
@@ -375,11 +380,7 @@ export default function App(): JSX.Element {
     });
 
     const disposeCopyToast = window.panelAPI.onCopyToast(() => {
-      if (copyToastTimerRef.current) clearTimeout(copyToastTimerRef.current);
-      setShowCopyToast(true);
-      copyToastTimerRef.current = setTimeout(() => {
-        setShowCopyToast(false);
-      }, 2000);
+      showToast('✓ 链接已复制', 'success');
     });
 
     const disposePanelState = window.panelAPI.onPanelState((state) => {
@@ -624,7 +625,7 @@ export default function App(): JSX.Element {
         style={{ backgroundColor: surface.bg, color: colors.text }}
       >
         <ResizeHandle edge={chromeState.edge} />
-        {showCopyToast ? (
+        {toast ? (
           <div
             style={{
               position: 'absolute',
@@ -632,7 +633,7 @@ export default function App(): JSX.Element {
               left: chromeState.edge === 'right' ? '50%' : undefined,
               right: chromeState.edge === 'left' ? '50%' : undefined,
               transform: 'translateX(-50%)',
-              background: '#4ade80',
+              background: toast.type === 'error' ? '#f87171' : toast.type === 'info' ? '#94a3b8' : '#4ade80',
               color: '#000',
               fontSize: 12,
               fontWeight: 600,
@@ -643,7 +644,7 @@ export default function App(): JSX.Element {
               pointerEvents: 'none'
             }}
           >
-            ✓ 链接已复制
+            {toast.message}
           </div>
         ) : null}
         <div
