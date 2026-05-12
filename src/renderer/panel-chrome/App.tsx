@@ -468,6 +468,13 @@ export default function App(): JSX.Element {
     };
   }, [addSiteUrl, customIconPath]);
 
+  const handleFaviconRetry = () => {
+    const url = addSiteUrl;
+    setAddSiteUrl('');
+    setFaviconError(null);
+    setTimeout(() => setAddSiteUrl(url), 0);
+  };
+
   const handleOpenExternal = async (): Promise<void> => {
     if (!chromeState.panelId || chromeState.panelType !== 'web') {
       return;
@@ -795,11 +802,12 @@ export default function App(): JSX.Element {
                       <div className="field-label mb-3">图标预览</div>
                       <div className="flex min-h-[120px] items-center gap-5 rounded-lg border px-4 py-4" style={{ borderColor: colors.subtleBorder, backgroundColor: colors.inputBg }}>
                         <div
-                          className="flex h-[72px] w-[72px] shrink-0 items-center justify-center overflow-hidden rounded-xl border-2 border-dashed"
+                          className={`relative flex h-[72px] w-[72px] shrink-0 items-center justify-center overflow-hidden rounded-xl border-2 border-dashed${faviconError && !customIconPath ? ' cursor-pointer' : ''}`}
                           style={{
                             borderColor: colors.subtleBorder,
                             backgroundColor: 'transparent',
                           }}
+                          onClick={faviconError && !customIconPath ? handleFaviconRetry : undefined}
                         >
                           {customIconPath ? (
                             <img
@@ -816,6 +824,11 @@ export default function App(): JSX.Element {
                           ) : (
                             <span className="select-none text-[28px] font-light leading-none" style={{ color: colors.mutedText }}>+</span>
                           )}
+                          {faviconError && !customIconPath ? (
+                            <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/40">
+                              <span style={{ color: '#fff', fontSize: 12, fontWeight: 600, letterSpacing: '0.04em' }}>↺ 重试</span>
+                            </div>
+                          ) : null}
                         </div>
 
                         <div className="min-w-0 flex-1">
@@ -912,7 +925,7 @@ export default function App(): JSX.Element {
                   </button>
                   <button
                     type="button"
-                    className="group inline-flex items-center gap-2 rounded-md border border-accent/50 bg-accent/10 px-6 py-2.5 text-[12px] font-semibold tracking-cn text-accent transition-colors hover:bg-accent hover:text-[#0A0A0A] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"
+                    className="group inline-flex items-center gap-2 rounded-md border border-accent/50 bg-accent/10 px-6 py-2.5 text-[12px] font-semibold tracking-cn text-accent transition-colors hover:bg-accent hover:text-[#0A0A0A] disabled:cursor-not-allowed disabled:opacity-50 disabled:saturate-0 disabled:hover:bg-transparent"
                     disabled={submittingSite || !addSiteUrl.trim()}
                     onClick={() => void handleSubmitSite()}
                   >
