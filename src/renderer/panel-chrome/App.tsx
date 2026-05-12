@@ -271,7 +271,13 @@ export default function App(): JSX.Element {
         }
 
         {
-          const result = await window.panelAPI.getSiteInfo({ panelId: targetPanel.id });
+          const result = await Promise.race([
+            window.panelAPI.getSiteInfo({ panelId: targetPanel.id }),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error('加载超时')), 10000)
+            )
+          ]).catch((e: Error) => ({ ok: false as const, error: e.message }));
+
           if (token !== hydrationTokenRef.current) {
             return;
           }
