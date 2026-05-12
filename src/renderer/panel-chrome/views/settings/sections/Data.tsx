@@ -6,7 +6,12 @@ interface DataColors {
   subtleBorder: string;
 }
 
-export function Data({ colors }: { colors: DataColors }): JSX.Element {
+interface DataProps {
+  colors: DataColors;
+  onToast: (message: string, type: 'success' | 'error' | 'info') => void;
+}
+
+export function Data({ colors, onToast }: DataProps): JSX.Element {
   const [confirming, setConfirming] = useState(false);
   const { text, mutedText, subtleBorder } = colors;
 
@@ -32,7 +37,7 @@ export function Data({ colors }: { colors: DataColors }): JSX.Element {
         onClick={async () => {
           const result = await window.panelAPI.exportConfig();
           if (result.ok && !result.data.canceled) {
-            window.alert(`已导出到：${result.data.path}`);
+            onToast(`已导出到：${result.data.path}`, 'success');
           }
         }}
         className={rowClass}
@@ -46,7 +51,7 @@ export function Data({ colors }: { colors: DataColors }): JSX.Element {
         onClick={async () => {
           const result = await window.panelAPI.importConfig();
           if (!result.ok) {
-            window.alert(`导入失败：${result.error}`);
+            onToast(`导入失败：${result.error}`, 'error');
           }
         }}
         className={rowClass}
@@ -89,7 +94,7 @@ export function Data({ colors }: { colors: DataColors }): JSX.Element {
                 onClick={async () => {
                   await window.panelAPI.clearStorageData();
                   setConfirming(false);
-                  window.alert('已清除');
+                  onToast('已清除', 'success');
                 }}
                 className="bg-[#a04848] px-4 py-2 text-[12px] font-semibold tracking-cn text-white transition-colors hover:bg-[#b85555]"
               >
