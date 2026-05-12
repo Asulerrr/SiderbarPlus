@@ -61,8 +61,8 @@ export const ResizeHandle: React.FC<Props> = ({ edge }) => {
 
   const positionStyle: React.CSSProperties =
     edge === 'right'
-      ? { left: 0, top: 0, bottom: 0, width: 8 }
-      : { right: 0, top: 0, bottom: 0, width: 8 };
+      ? { left: 0, top: 0, bottom: 0, width: 16 }
+      : { right: 0, top: 0, bottom: 0, width: 16 };
 
   // 发光线贴近面板一侧：面板在右侧时手柄在左边缘，发光线贴右；面板在左侧时反之
   const glowStyle: React.CSSProperties =
