@@ -611,6 +611,28 @@ export default function App(): JSX.Element {
         style={{ backgroundColor: surface.bg, color: colors.text }}
       >
         <ResizeHandle edge={chromeState.edge} />
+        {showCopyToast ? (
+          <div
+            style={{
+              position: 'absolute',
+              top: PANEL_TOP_INSET + 6,
+              left: chromeState.edge === 'right' ? '50%' : undefined,
+              right: chromeState.edge === 'left' ? '50%' : undefined,
+              transform: 'translateX(-50%)',
+              background: '#4ade80',
+              color: '#000',
+              fontSize: 12,
+              fontWeight: 600,
+              padding: '4px 14px',
+              borderRadius: 20,
+              zIndex: 300,
+              whiteSpace: 'nowrap',
+              pointerEvents: 'none'
+            }}
+          >
+            ✓ 链接已复制
+          </div>
+        ) : null}
         <div
           className={`absolute flex flex-col overflow-hidden shadow-[0_0_0_1px_rgba(0,0,0,0.18)] ${panelCardRadius} ${panelCardBorder}`}
           style={{
@@ -629,27 +651,6 @@ export default function App(): JSX.Element {
               className={`loading-bar${loadingDone ? ' loading-bar--done' : ''}`}
               style={{ width: `${loadingWidth}%` }}
             />
-          ) : null}
-          {showCopyToast ? (
-            <div
-              style={{
-                position: 'absolute',
-                top: 78,
-                left: '50%',
-                transform: 'translateX(-50%)',
-                background: '#4ade80',
-                color: '#000',
-                fontSize: 12,
-                fontWeight: 600,
-                padding: '4px 14px',
-                borderRadius: 20,
-                zIndex: 300,
-                whiteSpace: 'nowrap',
-                pointerEvents: 'none'
-              }}
-            >
-              ✓ 链接已复制
-            </div>
           ) : null}
           <div
             className={`flex h-[76px] shrink-0 items-center justify-between px-4 transition-opacity duration-100 ${

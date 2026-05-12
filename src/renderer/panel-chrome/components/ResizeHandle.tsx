@@ -64,11 +64,11 @@ export const ResizeHandle: React.FC<Props> = ({ edge }) => {
       ? { left: 0, top: 0, bottom: 0, width: 16 }
       : { right: 0, top: 0, bottom: 0, width: 16 };
 
-  // 发光线在面板边缘外侧（朝向 dock）：面板在右侧时手柄在左边缘，发光线贴左；面板在左侧时反之
-  const glowStyle: React.CSSProperties =
+  // 三点指示器贴面板边缘：面板在右侧时手柄在左边缘，三点贴左；面板在左侧时反之
+  const dotEdgeStyle: React.CSSProperties =
     edge === 'right'
-      ? { left: 0 }
-      : { right: 0 };
+      ? { left: 2 }
+      : { right: 2 };
 
   return (
     <div
@@ -82,16 +82,30 @@ export const ResizeHandle: React.FC<Props> = ({ edge }) => {
       <div
         style={{
           position: 'absolute',
-          top: 0,
-          bottom: 0,
-          width: 2,
-          background: 'linear-gradient(180deg, transparent 0%, #6c63ff 30%, #6c63ff 70%, transparent 100%)',
-          opacity: isHovered ? 0.7 : 0,
+          top: '50%',
+          transform: 'translateY(-50%)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 5,
+          alignItems: 'center',
+          opacity: isHovered ? 0.6 : 0,
           transition: 'opacity 0.15s ease',
           pointerEvents: 'none',
-          ...glowStyle
+          ...dotEdgeStyle
         }}
-      />
+      >
+        {[0, 1, 2].map((i) => (
+          <div
+            key={i}
+            style={{
+              width: 3,
+              height: 3,
+              borderRadius: '50%',
+              background: '#6c63ff'
+            }}
+          />
+        ))}
+      </div>
     </div>
   );
 };
