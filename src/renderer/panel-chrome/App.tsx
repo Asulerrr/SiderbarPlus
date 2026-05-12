@@ -135,6 +135,10 @@ export default function App(): JSX.Element {
   const [siteInfo, setSiteInfo] = useState<SiteInfo | null>(null);
   const [siteInfoError, setSiteInfoError] = useState<string | null>(null);
   const menuButtonRef = useRef<HTMLButtonElement | null>(null);
+  const [loadingWidth, setLoadingWidth] = useState(0);
+  const [loadingVisible, setLoadingVisible] = useState(false);
+  const [loadingDone, setLoadingDone] = useState(false);
+  const loadingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hydrationTokenRef = useRef(0);
   const panelCardRadius = chromeState.edge === 'right' ? 'rounded-l-lg' : 'rounded-r-lg';
   const panelCardBorder = chromeState.edge === 'right' ? 'border-r-0' : 'border-l-0';
@@ -346,6 +350,27 @@ export default function App(): JSX.Element {
       );
     });
 
+    const disposeLoading = window.panelAPI.onLoadingState((payload) => {
+      if (payload.panelId !== chromeState.panelId) return;
+
+      if (payload.isLoading) {
+        if (loadingTimerRef.current) clearTimeout(loadingTimerRef.current);
+        setLoadingDone(false);
+        setLoadingVisible(true);
+        setLoadingWidth(70);
+      } else {
+        setLoadingWidth(100);
+        loadingTimerRef.current = setTimeout(() => {
+          setLoadingDone(true);
+          loadingTimerRef.current = setTimeout(() => {
+            setLoadingVisible(false);
+            setLoadingWidth(0);
+            setLoadingDone(false);
+          }, 200);
+        }, 100);
+      }
+    });
+
     const disposePanelState = window.panelAPI.onPanelState((state) => {
       setChromeState((prev) =>
         prev.panelMode === state.panelMode ? prev : { ...prev, panelMode: state.panelMode }
@@ -366,6 +391,7 @@ export default function App(): JSX.Element {
       disposeFadeOut();
       disposeFadeIn();
       disposeNavigation();
+      disposeLoading();
       disposePanelState();
       disposeConfigChanged();
     };
@@ -587,6 +613,12 @@ export default function App(): JSX.Element {
             borderStyle: 'solid'
           }}
         >
+          {loadingVisible ? (
+            <div
+              className={`loading-bar${loadingDone ? ' loading-bar--done' : ''}`}
+              style={{ width: `${loadingWidth}%` }}
+            />
+          ) : null}
           <div
             className={`flex h-[76px] shrink-0 items-center justify-between px-4 transition-opacity duration-100 ${
               fading ? 'opacity-0' : 'opacity-100'

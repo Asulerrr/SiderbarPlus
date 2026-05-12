@@ -131,3 +131,18 @@ input[type='range'].slider-accent::-moz-range-thumb {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.22);
 }
+
+/* 面板加载进度条 */
+.loading-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 2px;
+  background: #6c63ff;
+  transition: width 1.5s ease-out, opacity 0.2s ease;
+  z-index: 200;
+  pointer-events: none;
+}
+.loading-bar.loading-bar--done {
+  opacity: 0;
+}
