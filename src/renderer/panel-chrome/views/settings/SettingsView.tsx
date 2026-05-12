@@ -23,7 +23,13 @@ function SectionHeading({ label, muted }: { label: string; muted: string }): JSX
   );
 }
 
-export function SettingsView({ colors }: { colors: SettingsColors }): JSX.Element {
+export function SettingsView({
+  colors,
+  onToast,
+}: {
+  colors: SettingsColors;
+  onToast: (message: string, type: 'success' | 'error' | 'info') => void;
+}): JSX.Element {
   const [config, setConfig] = useState<AppConfig | null>(null);
 
   useEffect(() => {
@@ -73,7 +79,7 @@ export function SettingsView({ colors }: { colors: SettingsColors }): JSX.Elemen
 
           <section className="rounded-xl px-5 py-4" style={{ backgroundColor: colors.footerBg }}>
             <SectionHeading label="数据" muted={colors.mutedText} />
-            <Data colors={colors} />
+            <Data colors={colors} onToast={onToast} />
           </section>
 
           <section className="rounded-xl px-5 py-4" style={{ backgroundColor: colors.footerBg }}>
