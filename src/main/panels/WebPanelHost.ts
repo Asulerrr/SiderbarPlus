@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import type {
   AppConfig,
   PanelDescriptor,
+  PanelLoadingPayload,
   PanelMenuState,
   PanelNavigationPayload,
   SiteInfo,
@@ -21,6 +22,7 @@ interface WebPanelHostDependencies {
   readConfig: () => Promise<AppConfig>;
   updateConfig: (patch: Partial<AppConfig>) => Promise<AppConfig>;
   emitNavigation: (payload: PanelNavigationPayload) => void;
+  emitLoading: (payload: PanelLoadingPayload) => void;
 }
 
 interface ViewMeta {
@@ -493,6 +495,14 @@ export class WebPanelHost {
 
     view.webContents.on('did-finish-load', () => {
       this.emitNavigationState(panelId, view);
+    });
+
+    view.webContents.on('did-start-loading', () => {
+      this.dependencies.emitLoading({ panelId, isLoading: true });
+    });
+
+    view.webContents.on('did-stop-loading', () => {
+      this.dependencies.emitLoading({ panelId, isLoading: false });
     });
 
     view.webContents.on('zoom-changed', () => {

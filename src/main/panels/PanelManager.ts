@@ -94,7 +94,8 @@ export class PanelManager {
       readConfig: () => this.configStore.read(),
       updateConfig: (patch) => this.configStore.update(patch),
       emitNavigation: (payload) =>
-        this.emitNavigation(payload.panelId, payload.url, payload.canGoBack)
+        this.emitNavigation(payload.panelId, payload.url, payload.canGoBack),
+      emitLoading: (payload) => this.emitLoading(payload.panelId, payload.isLoading)
     });
   }
 
@@ -857,6 +858,14 @@ export class PanelManager {
       panelId,
       url,
       canGoBack: canGoBack ?? this.webPanelHost.getView(panelId)?.webContents.canGoBack() ?? false
+    });
+  }
+
+  private emitLoading(panelId: string, isLoading: boolean): void {
+    if (this.panelWindowRef.isDestroyed()) return;
+    this.panelWindowRef.webContents.send(IPC_CHANNELS.panelLoadingState, {
+      panelId,
+      isLoading
     });
   }
 
