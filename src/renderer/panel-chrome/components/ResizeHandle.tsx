@@ -61,14 +61,14 @@ export const ResizeHandle: React.FC<Props> = ({ edge }) => {
 
   const positionStyle: React.CSSProperties =
     edge === 'right'
-      ? { left: 0, top: 0, bottom: 0, width: 16 }
-      : { right: 0, top: 0, bottom: 0, width: 16 };
+      ? { left: 0, top: 0, bottom: 0, width: 4 }
+      : { right: 0, top: 0, bottom: 0, width: 4 };
 
-  // 三点指示器贴面板边缘：面板在右侧时手柄在左边缘，三点贴左；面板在左侧时反之
-  const dotEdgeStyle: React.CSSProperties =
+  // VS Code 方案：面板边缘 1px 实线，hover 时显示
+  const lineStyle: React.CSSProperties =
     edge === 'right'
-      ? { left: 2 }
-      : { right: 2 };
+      ? { left: 0 }
+      : { right: 0 };
 
   return (
     <div
@@ -82,30 +82,16 @@ export const ResizeHandle: React.FC<Props> = ({ edge }) => {
       <div
         style={{
           position: 'absolute',
-          top: '50%',
-          transform: 'translateY(-50%)',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 5,
-          alignItems: 'center',
-          opacity: isHovered ? 0.6 : 0,
+          top: 0,
+          bottom: 0,
+          width: 1,
+          background: '#6c63ff',
+          opacity: isHovered ? 0.8 : 0,
           transition: 'opacity 0.15s ease',
           pointerEvents: 'none',
-          ...dotEdgeStyle
+          ...lineStyle
         }}
-      >
-        {[0, 1, 2].map((i) => (
-          <div
-            key={i}
-            style={{
-              width: 3,
-              height: 3,
-              borderRadius: '50%',
-              background: '#6c63ff'
-            }}
-          />
-        ))}
-      </div>
+      />
     </div>
   );
 };
