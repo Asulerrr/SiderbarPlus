@@ -634,7 +634,7 @@ export default function App(): JSX.Element {
             <div
               style={{
                 position: 'absolute',
-                top: 56,
+                top: 78,
                 left: '50%',
                 transform: 'translateX(-50%)',
                 background: '#4ade80',
