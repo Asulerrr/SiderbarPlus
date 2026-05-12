@@ -1,118 +1,118 @@
-# UX Polish: 4 Improvements Design
+# UX 优化：4 项改进设计方案
 
-Date: 2026-05-12
+日期：2026-05-12
 
-## Overview
+## 概述
 
-Four independent UX improvements to the SideBar Electron app:
+对 SideBar Electron 应用的 4 项独立 UX 改进：
 
-1. Panel loading progress bar
-2. Copy link toast feedback
-3. Resize handle visibility
-4. Favicon retry max limit
-
----
-
-## 1. Panel Loading Progress Bar
-
-**Goal:** Show a top-edge progress bar while web content is loading, so users know the panel isn't frozen.
-
-**Location:** `src/renderer/panel-chrome/App.tsx`
-
-**Behavior:**
-- When `navigationState.isLoading` becomes `true`: bar appears at 0%, transitions to 70% over 1.5s (fake progress via CSS transition)
-- When `isLoading` becomes `false`: bar jumps to 100%, then fades out over 200ms and is removed from DOM
-- Bar sits between the chrome header and the web content area (absolute positioned, z-index above content)
-- Color: accent purple `#6c63ff` (fixed, no theme dependency)
-
-**Implementation:**
-- No new IPC channels needed — `NavigationState.isLoading` already exists and is emitted via `onNavigationState`
-- React state: `loadingProgress: number` (0–100) + `loadingVisible: boolean`
-- CSS: `transition: width 1.5s ease-out` for fake progress, `transition: opacity 0.2s` for fade-out
-- Height: 2px, full width, no border-radius
-
-**Edge cases:**
-- If a new navigation starts while bar is fading out, reset immediately to 0% and show again
-- Bar is hidden (not rendered) when `loadingVisible` is false to avoid layout impact
+1. 面板加载进度条
+2. 复制链接 Toast 反馈
+3. 拖拽调宽手柄可见性
+4. Favicon 重试次数上限
 
 ---
 
-## 2. Copy Link Toast
+## 1. 面板加载进度条
 
-**Goal:** Confirm to the user that the URL was copied to clipboard.
+**目标：** 面板内容加载时在顶部显示进度条，让用户知道面板没有卡死。
 
-**Location:** `src/renderer/panel-chrome/App.tsx`
+**位置：** `src/renderer/panel-chrome/App.tsx`
 
-**Behavior:**
-- Triggered when the copy-link button is clicked and `navigator.clipboard.writeText()` resolves
-- Toast appears: green capsule pill (`✓ 链接已复制`), centered horizontally, 8px below the chrome header
-- Visible for 2 seconds, then fades out over 200ms
-- If copy fails (clipboard API error), toast does not appear (silent failure, same as current behavior)
+**行为：**
+- `navigationState.isLoading` 变为 `true` 时：进度条从 0% 在 1.5s 内过渡到 70%（CSS transition 模拟假进度）
+- `isLoading` 变为 `false` 时：进度条跳到 100%，200ms 后淡出并从 DOM 移除
+- 进度条位于 chrome header 和网页内容之间（绝对定位，z-index 高于内容层）
+- 颜色：固定使用 `#6c63ff`
 
-**Implementation:**
-- No new IPC channels needed — clipboard write happens entirely in renderer
-- React state: `showCopyToast: boolean`
-- `setTimeout` of 2000ms to clear state
-- CSS: `position: absolute`, `top: header-height + 8px`, `left: 50%`, `transform: translateX(-50%)`, `z-index: 100`
-- Style: `background: #4ade80`, `color: #000`, `font-size: 12px`, `font-weight: 600`, `padding: 4px 14px`, `border-radius: 20px`
-- Fade: `opacity` transition 0.2s on unmount (use CSS class toggle, not unmount, to allow transition)
+**实现：**
+- 无需新增 IPC 通道——`NavigationState.isLoading` 已存在，通过 `onNavigationState` 下发
+- React state：`loadingProgress: number`（0–100）+ `loadingVisible: boolean`
+- CSS：假进度用 `transition: width 1.5s ease-out`，淡出用 `transition: opacity 0.2s`
+- 高度：2px，全宽，无圆角
 
----
-
-## 3. Resize Handle Visibility
-
-**Goal:** Make the drag-to-resize zone discoverable by showing a glowing edge line on hover.
-
-**Location:** `src/renderer/panel-chrome/components/ResizeHandle.tsx`
-
-**Behavior:**
-- When mouse enters the 8px drag zone: a 2px wide vertical line appears on the inner edge of the handle
-- Line style: `linear-gradient(180deg, transparent 0%, #6c63ff 30%, #6c63ff 70%, transparent 100%)`, opacity 0.7
-- Fade in: `opacity` transition 0.15s ease
-- Fade out: same transition on mouse leave
-- During active drag: line stays visible at full opacity
-
-**Implementation:**
-- Add `isHovered: boolean` state to `ResizeHandle`
-- `onMouseEnter` → `setIsHovered(true)`, `onMouseLeave` → `setIsHovered(false)` (only when not dragging)
-- Render a `<div>` inside the handle with the gradient line, controlled by `isHovered || isDragging`
-- The line div: `position: absolute`, `width: 2px`, `height: 100%`, positioned on the panel-facing edge (left edge if panel is on right, right edge if panel is on left)
-- Edge side determined by a prop passed from `App.tsx` (already has access to `config.layout.edge`)
+**边界情况：**
+- 若进度条正在淡出时新导航开始，立即重置到 0% 并重新显示
+- `loadingVisible` 为 false 时不渲染进度条，避免影响布局
 
 ---
 
-## 4. Favicon Retry Max Limit
+## 2. 复制链接 Toast
 
-**Goal:** Stop retrying favicon fetch after 5 failures to prevent infinite network requests.
+**目标：** 点击复制链接后给用户明确的成功反馈。
 
-**Location:** `src/renderer/dock/components/DockItem.tsx`
+**位置：** `src/renderer/panel-chrome/App.tsx`
 
-**Behavior:**
-- Current: retries indefinitely with exponential backoff (5s → 10s → 20s → 40s cap)
-- New: stop retrying after `retryTick >= 5` (5 attempts total)
-- After max retries: keep letter fallback displayed permanently for the session
-- No user-visible change beyond the letter fallback staying (which already shows on failure)
+**行为：**
+- 触发时机：点击复制按钮且 `navigator.clipboard.writeText()` 成功后
+- Toast 样式：绿色胶囊（`✓ 链接已复制`），水平居中，位于 chrome header 下方 8px
+- 显示 2 秒后 200ms 淡出消失
+- 若复制失败（clipboard API 报错），不显示 Toast（静默失败，与当前行为一致）
 
-**Implementation:**
-- Add guard in the retry `useEffect`: `if (retryTick >= 5) return;`
-- No UI changes needed — letter fallback already renders correctly when `iconFailed` is true
-
----
-
-## Files Changed
-
-| File | Change |
-|------|--------|
-| `src/renderer/panel-chrome/App.tsx` | Add progress bar state + render, add copy toast state + render |
-| `src/renderer/panel-chrome/components/ResizeHandle.tsx` | Add hover state + glow line render, accept `edge` prop |
-| `src/renderer/panel-chrome/panel.css` | Add progress bar and toast CSS classes |
-| `src/renderer/dock/components/DockItem.tsx` | Add `retryTick >= 5` guard |
+**实现：**
+- 无需新增 IPC 通道——clipboard 写入完全在 renderer 层处理
+- React state：`showCopyToast: boolean`
+- `setTimeout` 2000ms 后清除状态
+- CSS：`position: absolute`、`top: header高度 + 8px`、`left: 50%`、`transform: translateX(-50%)`、`z-index: 100`
+- 样式：`background: #4ade80`、`color: #000`、`font-size: 12px`、`font-weight: 600`、`padding: 4px 14px`、`border-radius: 20px`
+- 淡出：用 CSS class 切换控制 `opacity` transition 0.2s（不用卸载组件，保留过渡动画）
 
 ---
 
-## Out of Scope
+## 3. 拖拽调宽手柄可见性
 
-- Keyboard shortcuts
-- Notification badges on dock icons
-- Panel preview on hover
-- Any changes to IPC contracts or main process
+**目标：** 鼠标悬停在拖拽区域时显示发光边线，让用户发现可以调整面板宽度。
+
+**位置：** `src/renderer/panel-chrome/components/ResizeHandle.tsx`
+
+**行为：**
+- 鼠标进入 8px 拖拽区域时：在手柄内侧边缘出现一条 2px 宽的竖向发光线
+- 线条样式：`linear-gradient(180deg, transparent 0%, #6c63ff 30%, #6c63ff 70%, transparent 100%)`，透明度 0.7
+- 淡入：`opacity` transition 0.15s ease
+- 淡出：鼠标离开时同样的 transition
+- 拖拽进行中：发光线保持全透明度显示
+
+**实现：**
+- 在 `ResizeHandle` 中添加 `isHovered: boolean` state
+- `onMouseEnter` → `setIsHovered(true)`，`onMouseLeave` → `setIsHovered(false)`（仅在非拖拽状态下）
+- 在手柄内渲染一个 `<div>` 作为发光线，由 `isHovered || isDragging` 控制显示
+- 发光线 div：`position: absolute`、`width: 2px`、`height: 100%`，贴近面板一侧（面板在右侧时贴左边，面板在左侧时贴右边）
+- 边缘方向通过 `App.tsx` 传入 prop（`App.tsx` 已有 `config.layout.edge`）
+
+---
+
+## 4. Favicon 重试次数上限
+
+**目标：** 最多重试 5 次后停止，避免无限发起网络请求。
+
+**位置：** `src/renderer/dock/components/DockItem.tsx`
+
+**行为：**
+- 当前：按指数退避（5s → 10s → 20s → 40s 封顶）无限重试
+- 修改后：`retryTick >= 5` 时停止重试
+- 达到上限后：保持字母 fallback 显示，本次会话内不再重试
+- 用户无感知变化——字母 fallback 本来就已经在显示
+
+**实现：**
+- 在重试 `useEffect` 中添加守卫：`if (retryTick >= 5) return;`
+- 无需 UI 改动——`iconFailed` 为 true 时字母 fallback 已正确渲染
+
+---
+
+## 涉及文件
+
+| 文件 | 改动内容 |
+|------|---------|
+| `src/renderer/panel-chrome/App.tsx` | 添加进度条 state + 渲染，添加复制 Toast state + 渲染 |
+| `src/renderer/panel-chrome/components/ResizeHandle.tsx` | 添加 hover state + 发光线渲染，接收 `edge` prop |
+| `src/renderer/panel-chrome/panel.css` | 添加进度条和 Toast 的 CSS 类 |
+| `src/renderer/dock/components/DockItem.tsx` | 添加 `retryTick >= 5` 守卫 |
+
+---
+
+## 不在范围内
+
+- 键盘快捷键
+- Dock 图标通知角标
+- 面板悬停预览
+- IPC 合约或主进程的任何改动
