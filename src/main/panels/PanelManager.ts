@@ -190,6 +190,9 @@ export class PanelManager {
       if (BrowserWindow.getFocusedWindow()) {
         return;
       }
+      if (this.panelMode === 'pinned') {
+        return;
+      }
       if (this.currentPanelId === BUILTIN_SETTINGS_ID && this.state === 'open') {
         void this.hidePanel(true);
       }
