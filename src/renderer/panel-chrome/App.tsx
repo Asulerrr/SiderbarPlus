@@ -139,6 +139,7 @@ export default function App(): JSX.Element {
   const [loadingVisible, setLoadingVisible] = useState(false);
   const [loadingDone, setLoadingDone] = useState(false);
   const loadingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const panelIdRef = useRef<string | null>(chromeState.panelId);
   const [showCopyToast, setShowCopyToast] = useState(false);
   const copyToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hydrationTokenRef = useRef(0);
@@ -353,7 +354,7 @@ export default function App(): JSX.Element {
     });
 
     const disposeLoading = window.panelAPI.onLoadingState((payload) => {
-      if (payload.panelId !== chromeState.panelId) return;
+      if (payload.panelId !== panelIdRef.current) return;
 
       if (payload.isLoading) {
         if (loadingTimerRef.current) clearTimeout(loadingTimerRef.current);
@@ -407,6 +408,18 @@ export default function App(): JSX.Element {
       disposeConfigChanged();
     };
   }, []);
+
+  // 面板切换时清除残留的加载进度条 timer
+  useEffect(() => {
+    panelIdRef.current = chromeState.panelId;
+    if (loadingTimerRef.current) {
+      clearTimeout(loadingTimerRef.current);
+      loadingTimerRef.current = null;
+    }
+    setLoadingVisible(false);
+    setLoadingWidth(0);
+    setLoadingDone(false);
+  }, [chromeState.panelId]);
 
   useEffect(() => {
     if (customIconPath) {
