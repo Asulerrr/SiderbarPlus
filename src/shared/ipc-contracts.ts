@@ -14,6 +14,7 @@ import type {
   PanelMenuActionPayload,
   PanelMenuOpenPayload,
   PanelMenuState,
+  PanelLoadingPayload,
   PanelNavigationPayload,
   PanelOpenExternalPayload,
   PanelsUpdatedPayload,
@@ -76,6 +77,7 @@ export const IPC_CHANNELS = {
   chromeFadeOut: 'chrome:fade-out',
   chromeFadeIn: 'chrome:fade-in',
   panelNavigationState: 'panel:navigation-state',
+  panelLoadingState: 'panel:loading-state',
   panelTogglePin: 'panel:toggle-pin',
   panelCommitResize: 'panel:commit-resize',
   panelResizeDrag: 'panel:resize-drag',
@@ -137,6 +139,7 @@ export interface PanelAPI {
   onChromeFadeOut: (callback: () => void) => () => void;
   onChromeFadeIn: (callback: (payload: PanelChromePayload) => void) => () => void;
   onNavigationState: (callback: (payload: PanelNavigationPayload) => void) => () => void;
+  onLoadingState: (callback: (payload: PanelLoadingPayload) => void) => () => void;
   onPanelState: (callback: (state: PanelState) => void) => () => void;
   onConfigChanged: (callback: (config: AppConfig) => void) => () => void;
   togglePin: () => Promise<IpcResult<void>>;

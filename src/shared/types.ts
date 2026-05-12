@@ -115,6 +115,11 @@ export interface PanelNavigationPayload {
   canGoBack: boolean;
 }
 
+export interface PanelLoadingPayload {
+  panelId: string;
+  isLoading: boolean;
+}
+
 export interface PanelMenuState {
   panelId: string;
   currentUrl: string;
