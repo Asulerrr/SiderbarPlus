@@ -1010,7 +1010,7 @@ export default function App(): JSX.Element {
                 </div>
               </div>
             ) : isSettingsPanel ? (
-              <SettingsView colors={colors} />
+              <SettingsView colors={colors} onToast={showToast} />
             ) : contentSnapshotDataUrl ? (
               <img
                 src={contentSnapshotDataUrl}
