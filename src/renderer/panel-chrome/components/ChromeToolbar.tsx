@@ -63,7 +63,7 @@ export function ChromeToolbar({
         className={`flex h-8 w-8 items-center justify-center rounded hover:bg-white/30 ${
           panelMode === 'pinned' ? 'text-accent bg-accent/15' : 'text-white/72'
         }`}
-        title={panelMode === 'pinned' ? '已固定 — 点击取消' : '未固定 — 点击固定'}
+        title={panelMode === 'pinned' ? '已固定 — 点击取消（Alt+`）' : '未固定 — 点击固定（Alt+`）'}
         onClick={() => void window.panelAPI.togglePin()}
       >
         {panelMode === 'pinned' ? <Pin size={14} /> : <PinOff size={14} />}

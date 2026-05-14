@@ -281,6 +281,21 @@ export class WindowManager {
     await this.panelManager?.togglePin();
   }
 
+  async togglePanelPinIfCursorOverPanel(): Promise<void> {
+    const browserWindow = this.panelWindow?.getBrowserWindow();
+    if (!browserWindow || browserWindow.isDestroyed()) return;
+    const cursor = screen.getCursorScreenPoint();
+    const bounds = browserWindow.getBounds();
+    if (
+      cursor.x >= bounds.x &&
+      cursor.x <= bounds.x + bounds.width &&
+      cursor.y >= bounds.y &&
+      cursor.y <= bounds.y + bounds.height
+    ) {
+      await this.panelManager?.togglePin();
+    }
+  }
+
   async commitPanelResize(width: number): Promise<void> {
     await this.panelManager?.commitResize(width);
     if (this.lastPanelState.panelMode === 'pinned') {

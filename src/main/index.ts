@@ -1,4 +1,4 @@
-import { app, BrowserWindow, session } from 'electron';
+import { app, BrowserWindow, globalShortcut, session } from 'electron';
 
 app.commandLine.appendSwitch('disable-features', 'UserAgentClientHint,UserAgentClientHints,FedCm,FedCmWithoutWellKnownEnforcement,FedCmIdpSigninStatus,FedCmButtonMode,FedCmMultipleIdentityProviders');
 
@@ -79,6 +79,11 @@ const bootstrap = async (): Promise<void> => {
     fullscreenWatcher
   );
 
+  // 全局快捷键：Alt+` 在鼠标所在面板区域内固定/取消固定
+  globalShortcut.register('Alt+`', () => {
+    void windowManager?.togglePanelPinIfCursorOverPanel();
+  });
+
   logger.info(`${APP_NAME} started`, { isAutoStart });
 };
 
@@ -109,8 +114,9 @@ app.on('window-all-closed', () => {
   }
 });
 
-// 退出前注销 AppBar + 销毁所有窗口 + 持久化 cookies + 等待 config 写入
+// 退出前注销 AppBar + 销毁所有窗口 + 注销全局快捷键 + 持久化 cookies + 等待 config 写入
 app.on('before-quit', (event) => {
+  globalShortcut.unregisterAll();
   windowManager?.disposeAppBar();
   BrowserWindow.getAllWindows().forEach((w) => {
     if (!w.isDestroyed()) w.destroy();

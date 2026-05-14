@@ -608,8 +608,12 @@ export default function App(): JSX.Element {
       onMouseDown={() => {
         void window.panelAPI.markSticky();
       }}
-      onKeyDown={() => {
+      onKeyDown={(e) => {
         void window.panelAPI.markSticky();
+        if (e.altKey && e.key === '`') {
+          e.preventDefault();
+          void window.panelAPI.togglePin();
+        }
       }}
       onMouseLeave={() => {
         void window.panelAPI.scheduleHide();
