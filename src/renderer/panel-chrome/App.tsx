@@ -1,12 +1,4 @@
-import {
-  ChevronLeft,
-  ExternalLink,
-  Minus,
-  MoreHorizontal,
-  Pin,
-  PinOff,
-  X
-} from 'lucide-react';
+import { ChevronLeft } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PANEL_DEFAULT_WIDTH } from '@shared/constants';
 import { toRenderableIconUrl } from '@shared/iconUrl';
@@ -21,6 +13,7 @@ import type {
   PanelNavigationPayload,
   SiteInfo
 } from '@shared/types';
+import { ChromeToolbar } from './components/ChromeToolbar';
 import { ResizeHandle } from './components/ResizeHandle';
 import { SettingsView } from './views/settings/SettingsView';
 
@@ -134,7 +127,6 @@ export default function App(): JSX.Element {
   const [addSiteError, setAddSiteError] = useState<string | null>(null);
   const [siteInfo, setSiteInfo] = useState<SiteInfo | null>(null);
   const [siteInfoError, setSiteInfoError] = useState<string | null>(null);
-  const menuButtonRef = useRef<HTMLButtonElement | null>(null);
   const [loadingWidth, setLoadingWidth] = useState(0);
   const [loadingVisible, setLoadingVisible] = useState(false);
   const [loadingDone, setLoadingDone] = useState(false);
@@ -475,16 +467,6 @@ export default function App(): JSX.Element {
     setTimeout(() => setAddSiteUrl(url), 0);
   };
 
-  const handleOpenExternal = async (): Promise<void> => {
-    if (!chromeState.panelId || chromeState.panelType !== 'web') {
-      return;
-    }
-
-    await window.panelAPI.openExternal({
-      panelId: chromeState.panelId
-    });
-  };
-
   const handleGoBack = async (): Promise<void> => {
     if (!chromeState.panelId || chromeState.panelType !== 'web' || !chromeState.canGoBack) {
       return;
@@ -673,12 +655,6 @@ export default function App(): JSX.Element {
             borderStyle: 'solid'
           }}
         >
-          {loadingVisible ? (
-            <div
-              className={`loading-bar${loadingDone ? ' loading-bar--done' : ''}`}
-              style={{ width: `${loadingWidth}%` }}
-            />
-          ) : null}
           <div
             className={`flex h-[76px] shrink-0 items-center justify-between px-4 transition-opacity duration-100 ${
               fading ? 'opacity-0' : 'opacity-100'
@@ -704,69 +680,19 @@ export default function App(): JSX.Element {
                 </div>
               </div>
             </div>
-            <div className="relative flex shrink-0 items-center">
-              <button
-                type="button"
-                title="在浏览器中打开"
-                className={`flex h-8 w-8 items-center justify-center rounded text-white/72 hover:bg-white/30 ${
-                  chromeState.panelType === 'web' ? '' : 'pointer-events-none opacity-35'
-                }`}
-                onClick={() => void handleOpenExternal()}
-              >
-                <ExternalLink size={14} />
-              </button>
-              <button
-                ref={menuButtonRef}
-                type="button"
-                title="更多"
-                className={`flex h-8 w-8 items-center justify-center rounded text-white/72 hover:bg-white/30 ${
-                  chromeState.panelType === 'web' ? '' : 'pointer-events-none opacity-35'
-                }`}
-                onMouseDown={(event) => {
-                  event.stopPropagation();
-                }}
-                onClick={() => {
-                  if (!chromeState.panelId || !menuButtonRef.current || chromeState.panelType !== 'web') {
-                    return;
-                  }
-
-                  const rect = menuButtonRef.current.getBoundingClientRect();
-                  void window.panelAPI.openMenu({
-                    panelId: chromeState.panelId,
-                    edge: chromeState.edge,
-                    x: rect.right,
-                    y: rect.bottom + 6
-                  });
-                }}
-              >
-                <MoreHorizontal size={14} />
-              </button>
-              <button
-                type="button"
-                className={`flex h-8 w-8 items-center justify-center rounded hover:bg-white/30 ${
-                  chromeState.panelMode === 'pinned' ? 'text-accent bg-accent/15' : 'text-white/72'
-                }`}
-                title={chromeState.panelMode === 'pinned' ? '已固定 — 点击取消' : '未固定 — 点击固定'}
-                onClick={() => void window.panelAPI.togglePin()}
-              >
-                {chromeState.panelMode === 'pinned' ? <Pin size={14} /> : <PinOff size={14} />}
-              </button>
-              <button
-                type="button"
-                className="flex h-8 w-8 items-center justify-center rounded text-white/72 hover:bg-white/30"
-                onClick={() => void window.panelAPI.minimizePanel()}
-              >
-                <Minus size={14} />
-              </button>
-              <button
-                type="button"
-                className="flex h-8 w-8 items-center justify-center rounded text-white/72 hover:bg-white/30"
-                onClick={() => void window.panelAPI.closePanel()}
-              >
-                <X size={14} />
-              </button>
-            </div>
+            <ChromeToolbar
+              panelId={chromeState.panelId}
+              panelType={chromeState.panelType}
+              panelMode={chromeState.panelMode}
+              edge={chromeState.edge}
+            />
           </div>
+          {loadingVisible ? (
+            <div
+              className={`loading-bar${loadingDone ? ' loading-bar--done' : ''}`}
+              style={{ width: `${loadingWidth}%` }}
+            />
+          ) : null}
           <div className="relative flex-1 overflow-hidden bg-[#242424]">
             {isSiteFormPanel ? (
               <div className="absolute inset-0 flex flex-col" style={{ backgroundColor: colors.innerBg, color: colors.text }}>

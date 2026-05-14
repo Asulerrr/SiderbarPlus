@@ -61,10 +61,9 @@ export const ResizeHandle: React.FC<Props> = ({ edge }) => {
 
   const positionStyle: React.CSSProperties =
     edge === 'right'
-      ? { left: 0, top: 0, bottom: 0, width: 4 }
-      : { right: 0, top: 0, bottom: 0, width: 4 };
+      ? { left: 0, top: 0, bottom: 0, width: 8 }
+      : { right: 0, top: 0, bottom: 0, width: 8 };
 
-  // VS Code 方案：面板边缘 1px 实线，hover 时显示
   const lineStyle: React.CSSProperties =
     edge === 'right'
       ? { left: 0 }
@@ -77,17 +76,23 @@ export const ResizeHandle: React.FC<Props> = ({ edge }) => {
       onMouseDown={onMouseDown}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => { if (!activeRef.current) setIsHovered(false); }}
-      style={{ position: 'absolute', cursor: 'ew-resize', zIndex: 50, ...positionStyle }}
+      style={{
+        position: 'absolute',
+        cursor: 'ew-resize',
+        zIndex: 50,
+        ...positionStyle
+      }}
     >
+      {/* idle 时 1px 半透明线保证 hit-test 命中，hover 时加宽高亮 */}
       <div
         style={{
           position: 'absolute',
           top: 0,
           bottom: 0,
-          width: 2,
+          width: isHovered ? 2 : 1,
           background: '#4abff6',
-          opacity: isHovered ? 0.8 : 0,
-          transition: 'opacity 0.15s ease',
+          opacity: isHovered ? 0.8 : 0.15,
+          transition: 'opacity 0.15s ease, width 0.15s ease',
           pointerEvents: 'none',
           ...lineStyle
         }}

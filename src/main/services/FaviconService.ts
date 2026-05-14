@@ -20,8 +20,21 @@ interface IconCandidate {
 }
 
 export class FaviconService {
+  private readonly inflight = new Map<string, Promise<FaviconFetchResult>>();
+
   async fetch(url: string): Promise<FaviconFetchResult> {
     const normalizedUrl = normalizeUrl(url);
+    const existing = this.inflight.get(normalizedUrl);
+    if (existing) return existing;
+
+    const work = this.doFetch(normalizedUrl).finally(() => {
+      this.inflight.delete(normalizedUrl);
+    });
+    this.inflight.set(normalizedUrl, work);
+    return work;
+  }
+
+  private async doFetch(normalizedUrl: string): Promise<FaviconFetchResult> {
     const target = new URL(normalizedUrl);
     const fallbackLetter = buildFallbackLetter(target);
     const fallbackColor = buildFallbackColor(target.hostname);

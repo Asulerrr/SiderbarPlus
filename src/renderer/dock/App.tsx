@@ -194,7 +194,48 @@ export default function App(): JSX.Element {
       }}
     >
       <div className="flex-1 min-h-0 overflow-hidden">
-        <DockIconList
+        {panels.length === 0 ? (
+          <div
+            className={`flex h-full flex-col items-center justify-end pb-3 select-none ${
+              edge === 'right' ? 'pl-1.5' : 'pr-1.5'
+            }`}
+            style={{ color: surface.fg, opacity: 0.28 }}
+          >
+            <span className="text-center text-[10px] leading-tight tracking-cn">
+              点击
+              <br />
+              <span style={{ fontWeight: 600 }}>+</span> 号按钮
+              <br />
+              添加网页
+            </span>
+            <svg
+              width="14" height="24" viewBox="0 0 14 24" fill="none"
+              style={{ marginTop: 6, animation: 'dock-hint-bounce 2s ease-in-out infinite' }}
+            >
+              <path
+                d="M7 0 L7 18"
+                stroke="currentColor"
+                strokeWidth="1.2"
+                strokeLinecap="round"
+              />
+              <path
+                d="M3 16 L7 22 L11 16"
+                stroke="currentColor"
+                strokeWidth="1.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                fill="none"
+              />
+            </svg>
+            <style>{`
+              @keyframes dock-hint-bounce {
+                0%, 100% { transform: translateY(0); opacity: 0.7; }
+                50% { transform: translateY(4px); opacity: 1; }
+              }
+            `}</style>
+          </div>
+        ) : (
+          <DockIconList
           panels={panels}
           activePanelId={activeIndicatorPanelId}
           highlightedPanelId={highlightedPanelId}
@@ -206,7 +247,8 @@ export default function App(): JSX.Element {
           onHover={handleHoverPanel}
           onActivate={(id) => void handleActivatePanel(id)}
           onContextMenu={handleContextMenu}
-        />
+          />
+        )}
       </div>
 
       <DockFooter

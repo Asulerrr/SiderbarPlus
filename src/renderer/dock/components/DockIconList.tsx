@@ -231,15 +231,15 @@ export function DockIconList({
     }, DRAG_HOLD_MS);
   };
 
-  const handleItemHover = (panelId: string): void => {
+  const handleItemHover = useCallback((panelId: string): void => {
     if (dragStartedRef.current || pressedPanelIdRef.current) return;
     onHover(panelId);
-  };
+  }, [onHover]);
 
-  const handleItemActivate = (panelId: string): void => {
+  const handleItemActivate = useCallback((panelId: string): void => {
     if (dragStartedRef.current || pressedPanelIdRef.current) return;
     onActivate(panelId);
-  };
+  }, [onActivate]);
 
   // ---- per-item transform ----
   const getItemShift = (visualIndex: number): string => {

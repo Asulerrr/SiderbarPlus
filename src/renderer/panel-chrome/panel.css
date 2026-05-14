@@ -132,11 +132,10 @@ input[type='range'].slider-accent::-moz-range-thumb {
   background: rgba(255, 255, 255, 0.22);
 }
 
-/* 面板加载进度条 */
+/* 面板加载进度条 — 位于标题栏与网页区接缝处 */
 .loading-bar {
-  position: absolute;
-  top: 0;
-  left: 0;
+  position: relative;
+  flex-shrink: 0;
   height: 2px;
   background: #4abff6;
   transition: width 1.5s ease-out, opacity 0.2s ease;
