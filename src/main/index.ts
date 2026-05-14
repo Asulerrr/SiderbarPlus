@@ -7,8 +7,8 @@ app.commandLine.appendSwitch('user-agent', CHROME_UA);
 app.userAgentFallback = CHROME_UA;
 import { join } from 'node:path';
 import { APP_ID, APP_NAME, BUILTIN_SETTINGS_ID } from '../shared/constants';
-import type { PanelState } from '../shared/types';
 import { registerIpcHandlers } from './ipc';
+import { emitPanelState } from './utils/panelState';
 import { AutoLaunchService } from './services/AutoLaunchService';
 import { FullscreenWatcher } from './services/FullscreenWatcher';
 import { ConfigStore } from './store/ConfigStore';
@@ -25,16 +25,6 @@ let configStoreRef: ConfigStore | null = null;
 // 自动 showInactive，无欢迎弹窗，与正常启动无可见差异；保留参数解析与日志，
 // 后续若加欢迎/首次引导 UI 时可据此跳过。
 const isAutoStart = process.argv.includes('--autostart');
-
-const emitPanelState = (state: PanelState): void => {
-  for (const window of BrowserWindow.getAllWindows()) {
-    if (window.getTitle() === 'SideBar Panel Animation') {
-      continue;
-    }
-
-    window.webContents.send('panel:state', state);
-  }
-};
 
 const bootstrap = async (): Promise<void> => {
   app.setAppUserModelId(APP_ID);

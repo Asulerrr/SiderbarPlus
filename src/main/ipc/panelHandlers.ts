@@ -1,4 +1,4 @@
-import { BrowserWindow, Menu, dialog, ipcMain } from 'electron';
+import { Menu, dialog, ipcMain } from 'electron';
 import { copyFile, mkdir } from 'node:fs/promises';
 import { extname, join, resolve } from 'node:path';
 import { nanoid } from 'nanoid';
@@ -10,7 +10,6 @@ import type {
   PanelMenuActionPayload,
   PanelMenuState,
   PanelOpenExternalPayload,
-  PanelState,
   PanelUpdatePayload,
   SiteInfo
 } from '../../shared/types';
@@ -19,16 +18,6 @@ import { hydratePanelsForRenderer } from '../services/IconAssetService';
 import { logger } from '../utils/logger';
 import { getIconsPath } from '../utils/paths';
 import type { WindowManager } from '../windows/WindowManager';
-
-const emitPanelState = (state: PanelState): void => {
-  for (const window of BrowserWindow.getAllWindows()) {
-    if (window.getTitle() === 'SideBar Panel Animation') {
-      continue;
-    }
-
-    window.webContents.send(IPC_CHANNELS.panelState, state);
-  }
-};
 
 export const registerPanelHandlers = (
   configStore: ConfigStore,

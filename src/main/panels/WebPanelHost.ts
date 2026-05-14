@@ -29,11 +29,15 @@ interface ViewMeta {
   defaultUserAgent: string;
 }
 
+const MAX_CACHED_VIEWS = 8;
+
 export class WebPanelHost {
   private readonly views = new Map<string, WebContentsView>();
   private readonly meta = new Map<string, ViewMeta>();
   private readonly partitions = new Map<string, string>();
   private readonly lastGoodUrls = new Map<string, string>();
+  // LRU order: most-recently-used last
+  private readonly lruOrder: string[] = [];
   private readonly sharedSession = session.fromPartition(SHARED_PARTITION, { cache: true });
   private readonly browserService = new BrowserService();
   private currentConfig: AppConfig | null = null;
@@ -60,6 +64,7 @@ export class WebPanelHost {
       if (this.partitions.get(descriptor.id) !== partition) {
         this.destroyView(descriptor.id);
       } else {
+        this.touchLru(descriptor.id);
         this.applyViewPreferences(descriptor.id, existing, descriptor.web);
         return existing;
       }
@@ -73,7 +78,7 @@ export class WebPanelHost {
         contextIsolation: true,
         sandbox: false,
         nativeWindowOpen: true
-      } as any
+      } as Electron.WebPreferences
     });
 
     this.partitions.set(descriptor.id, partition);
@@ -216,6 +221,8 @@ export class WebPanelHost {
     this.meta.set(descriptor.id, {
       defaultUserAgent: view.webContents.getUserAgent()
     });
+    this.touchLru(descriptor.id);
+    this.evictLru();
 
     view.webContents.insertCSS('*,*::before,*::after{cursor:default!important}');
 
@@ -425,6 +432,23 @@ export class WebPanelHost {
     this.meta.delete(panelId);
     this.partitions.delete(panelId);
     this.lastGoodUrls.delete(panelId);
+    const idx = this.lruOrder.indexOf(panelId);
+    if (idx !== -1) this.lruOrder.splice(idx, 1);
+  }
+
+  private touchLru(panelId: string): void {
+    const idx = this.lruOrder.indexOf(panelId);
+    if (idx !== -1) this.lruOrder.splice(idx, 1);
+    this.lruOrder.push(panelId);
+  }
+
+  private evictLru(): void {
+    while (this.views.size > MAX_CACHED_VIEWS) {
+      const victim = this.lruOrder[0];
+      if (!victim) break;
+      logger.info(`WebPanelHost: evicting LRU view ${victim}`);
+      this.destroyView(victim);
+    }
   }
 
   private async getFreshConfig(): Promise<AppConfig> {
