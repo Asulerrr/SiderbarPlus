@@ -18,6 +18,24 @@ const CHROME_USER_AGENT = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit
 const MOBILE_USER_AGENT =
   'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1';
 
+const resolvePartition = (descriptor: PanelDescriptor): string => {
+  const web = descriptor.web;
+  if (!web) return SHARED_PARTITION;
+
+  if (web.sessionGroup === '__isolated__') {
+    return `persist:panel-${descriptor.id}`;
+  }
+  if (web.sessionGroup) {
+    return `persist:group-${web.sessionGroup}`;
+  }
+
+  if (web.isolatedSession) {
+    return `persist:panel-${descriptor.id}`;
+  }
+
+  return SHARED_PARTITION;
+};
+
 interface WebPanelHostDependencies {
   readConfig: () => Promise<AppConfig>;
   updateConfig: (patch: Partial<AppConfig>) => Promise<AppConfig>;
@@ -54,9 +72,7 @@ export class WebPanelHost {
   }
 
   getOrCreateView(descriptor: PanelDescriptor): WebContentsView {
-    const partition = descriptor.web?.isolatedSession
-      ? `persist:panel-${descriptor.id}`
-      : SHARED_PARTITION;
+    const partition = resolvePartition(descriptor);
 
     const existing = this.views.get(descriptor.id);
     if (existing) {

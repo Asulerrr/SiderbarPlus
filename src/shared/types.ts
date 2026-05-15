@@ -9,6 +9,7 @@ export interface WebPanelConfig {
   userAgentMode: 'desktop' | 'mobile';
   notificationsSnoozed?: boolean;
   isolatedSession?: boolean;
+  sessionGroup?: string;
 }
 
 export interface BuiltinPanelConfig {

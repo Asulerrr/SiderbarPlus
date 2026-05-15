@@ -103,7 +103,8 @@ const panelAPI: PanelAPI = {
   importConfig: () => ipcRenderer.invoke(IPC_CHANNELS.settingsImportConfig),
   clearStorageData: () => ipcRenderer.invoke(IPC_CHANNELS.settingsClearStorageData),
   checkUpdate: () => ipcRenderer.invoke(IPC_CHANNELS.settingsCheckUpdate),
-  quitApp: () => ipcRenderer.invoke(IPC_CHANNELS.settingsQuitApp)
+  quitApp: () => ipcRenderer.invoke(IPC_CHANNELS.settingsQuitApp),
+  listSessionGroups: () => ipcRenderer.invoke(IPC_CHANNELS.configListSessionGroups)
 };
 
 contextBridge.exposeInMainWorld('panelAPI', panelAPI);

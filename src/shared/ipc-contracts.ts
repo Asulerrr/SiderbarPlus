@@ -87,7 +87,8 @@ export const IPC_CHANNELS = {
   settingsImportConfig: 'settings:import-config',
   settingsClearStorageData: 'settings:clear-storage-data',
   settingsCheckUpdate: 'settings:check-update',
-  settingsQuitApp: 'settings:quit-app'
+  settingsQuitApp: 'settings:quit-app',
+  configListSessionGroups: 'config:list-session-groups'
 } as const;
 
 export interface DockAPI {
@@ -153,6 +154,7 @@ export interface PanelAPI {
   clearStorageData: () => Promise<IpcResult<void>>;
   checkUpdate: () => Promise<IpcResult<UpdateCheckResult>>;
   quitApp: () => Promise<IpcResult<void>>;
+  listSessionGroups: () => Promise<IpcResult<string[]>>;
 }
 
 export interface BuiltinAPI {

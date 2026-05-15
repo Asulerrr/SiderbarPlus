@@ -118,7 +118,10 @@ export default function App(): JSX.Element {
   const [contentSnapshotDataUrl, setContentSnapshotDataUrl] = useState<string | null>(null);
   const [addSiteUrl, setAddSiteUrl] = useState('');
   const [selectedBrowserId, setSelectedBrowserId] = useState('system');
-  const [isolatedSession, setIsolatedSession] = useState(false);
+  const [sessionGroup, setSessionGroup] = useState('');
+  const [sessionGroups, setSessionGroups] = useState<string[]>([]);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [showNewGroupInput, setShowNewGroupInput] = useState(false);
   const [customIconPath, setCustomIconPath] = useState<string | null>(null);
   const [autoFavicon, setAutoFavicon] = useState<FaviconFetchResult | null>(null);
   const [faviconLoading, setFaviconLoading] = useState(false);
@@ -194,7 +197,9 @@ export default function App(): JSX.Element {
   const resetSiteForm = (): void => {
     setAddSiteUrl('');
     setSelectedBrowserId('system');
-    setIsolatedSession(false);
+    setSessionGroup('');
+    setNewGroupName('');
+    setShowNewGroupInput(false);
     setCustomIconPath(null);
     setAutoFavicon(null);
     setFaviconLoading(false);
@@ -249,7 +254,7 @@ export default function App(): JSX.Element {
           setCustomIconPath(
             targetPanel.iconSource.kind === 'custom' ? targetPanel.iconSource.path ?? null : null
           );
-          setIsolatedSession(targetPanel.web?.isolatedSession ?? false);
+          setSessionGroup(targetPanel.web?.sessionGroup ?? '');
         }
         return;
       case 'site-info':
@@ -314,6 +319,12 @@ export default function App(): JSX.Element {
     void window.panelAPI.listBrowsers().then((result) => {
       if (mounted && result.ok) {
         setBrowsers(result.data);
+      }
+    });
+
+    void window.panelAPI.listSessionGroups().then((result) => {
+      if (mounted && result.ok) {
+        setSessionGroups(result.data);
       }
     });
 
@@ -541,6 +552,10 @@ export default function App(): JSX.Element {
     const isEditSitePanel = chromeState.builtinWidgetId === 'edit-site';
     const targetPanelId = chromeState.builtinTargetPanelId;
 
+    const resolvedGroup = showNewGroupInput && newGroupName.trim()
+      ? newGroupName.trim()
+      : sessionGroup;
+
     const result =
       isEditSitePanel && targetPanelId
         ? await window.panelAPI.updatePanel({
@@ -551,7 +566,7 @@ export default function App(): JSX.Element {
               web: {
                 url: normalizedUrl,
                 openInBrowser: selectedBrowserId,
-                isolatedSession
+                sessionGroup: resolvedGroup || undefined
               }
             }
           })
@@ -566,7 +581,7 @@ export default function App(): JSX.Element {
               zoomFactor: 1,
               userAgentMode: 'desktop',
               notificationsSnoozed: false,
-              isolatedSession
+              sessionGroup: resolvedGroup || undefined
             }
           });
 
@@ -829,17 +844,51 @@ export default function App(): JSX.Element {
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-3">
-                      <input
-                        type="checkbox"
-                        id="isolated-session"
-                        checked={isolatedSession}
-                        onChange={(e) => setIsolatedSession(e.target.checked)}
-                        className="h-4 w-4 accent-[#4CC2FF]"
-                      />
-                      <label htmlFor="isolated-session" className="text-[13px] tracking-cn" style={{ color: colors.mutedText }}>
-                        独立登录态（添加多个同站点时使用不同账号）
-                      </label>
+                    <div>
+                      <label className="field-label mb-2.5">会话分组</label>
+                      <select
+                        value={showNewGroupInput ? '__new__' : sessionGroup}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          if (value === '__new__') {
+                            setShowNewGroupInput(true);
+                            setNewGroupName('');
+                          } else {
+                            setShowNewGroupInput(false);
+                            setSessionGroup(value);
+                          }
+                        }}
+                        className="input-accent h-11 w-full border bg-transparent px-3 text-[13px] tracking-cn outline-none transition-colors"
+                        style={{ borderColor: colors.subtleBorder, color: colors.text, backgroundColor: colors.inputBg }}
+                      >
+                        <option value="" style={{ backgroundColor: colors.innerBg, color: colors.text }}>
+                          共享（默认）
+                        </option>
+                        <option value="__isolated__" style={{ backgroundColor: colors.innerBg, color: colors.text }}>
+                          独立会话
+                        </option>
+                        {sessionGroups.map((group) => (
+                          <option key={group} value={group} style={{ backgroundColor: colors.innerBg, color: colors.text }}>
+                            {group}
+                          </option>
+                        ))}
+                        <option value="__new__" style={{ backgroundColor: colors.innerBg, color: colors.text }}>
+                          新建分组…
+                        </option>
+                      </select>
+                      {showNewGroupInput ? (
+                        <input
+                          value={newGroupName}
+                          onChange={(event) => setNewGroupName(event.target.value)}
+                          placeholder="输入分组名称，如：工作、个人"
+                          className="input-accent mt-2.5 h-11 w-full border bg-transparent px-3 text-[13px] tracking-cn outline-none transition-colors"
+                          style={{ borderColor: colors.subtleBorder, color: colors.text }}
+                          autoFocus
+                        />
+                      ) : null}
+                      <p className="mt-2.5 border-l-2 pl-3 text-[12px] leading-relaxed tracking-cn" style={{ borderColor: colors.subtleBorder, color: colors.mutedText }}>
+                        同一分组内的站点共享登录态。登录一次 Google，同组站点即可直接使用。
+                      </p>
                     </div>
                   </div>
                 </div>

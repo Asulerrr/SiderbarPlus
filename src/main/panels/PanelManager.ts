@@ -64,6 +64,7 @@ export class PanelManager {
   private pendingDestroyId: string | null = null;
   private lastResizeDragWidth: number | null = null;
   private readonly snapshots = new Map<string, string>();
+  private readonly createdAt = Date.now();
 
   private readonly dockWindowRef: BrowserWindow;
 
@@ -131,6 +132,8 @@ export class PanelManager {
         this.resetAnimationWindow();
       }
 
+      ++this.lifecycleToken;
+      this.currentPanelId = panelId;
       this.applyPanelBounds(descriptor, config);
       await this.switchPanel(descriptor, config.layout.edge);
       this.emitState(config.layout.edge, this.panelMode);
@@ -841,6 +844,12 @@ export class PanelManager {
 
   private async captureViewSnapshot(view: WebContentsView | null): Promise<string | null> {
     if (!view || view.webContents.isDestroyed()) {
+      return null;
+    }
+
+    // AppBar 注册后 Windows 需要 ~600ms 稳定 work area；
+    // capturePage 可能触发 display-metrics-changed 导致 AppBar 闪烁
+    if (Date.now() - this.createdAt < 800) {
       return null;
     }
 

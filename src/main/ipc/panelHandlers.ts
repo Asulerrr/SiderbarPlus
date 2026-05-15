@@ -597,4 +597,26 @@ export const registerPanelHandlers = (
     if (typeof width !== 'number' || !Number.isFinite(width)) return;
     windowManager.resizeDragPanel(width);
   });
+
+  ipcMain.handle(
+    IPC_CHANNELS.configListSessionGroups,
+    async (): Promise<IpcResult<string[]>> => {
+      try {
+        const config = await configStore.read();
+        const groups = new Set<string>();
+        for (const panel of config.panels) {
+          if (panel.web?.sessionGroup && panel.web.sessionGroup !== '__isolated__') {
+            groups.add(panel.web.sessionGroup);
+          }
+        }
+        return { ok: true, data: [...groups].sort() };
+      } catch (error) {
+        logger.error('config:list-session-groups failed', error);
+        return {
+          ok: false,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        };
+      }
+    }
+  );
 };
