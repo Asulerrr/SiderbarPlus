@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, Notification, session, shell, WebContentsView } from 'electron';
+import { app, BrowserWindow, clipboard, ipcMain, Notification, session, shell, WebContentsView } from 'electron';
 import { spawn } from 'node:child_process';
 import { join } from 'node:path';
 import type {
@@ -61,10 +61,57 @@ export class WebPanelHost {
   private currentConfig: AppConfig | null = null;
   private readonly sessionsWithHandlers = new Set<string>();
   private readonly popupWebContentsIds = new Set<number>();
+  private readonly panelUrls = new Map<string, string>();
+  private readonly popupParentMap = new Map<number, string>(); // popup wcId → parent panelId
 
   constructor(private readonly dependencies: WebPanelHostDependencies) {
     this.ensureSessionHandlers(SHARED_PARTITION);
     void this.refreshConfig();
+
+    // IPC: popup preload requests parent URL for window.opener.location
+    ipcMain.on('get-parent-url', (event) => {
+      const wcId = event.sender.id;
+      const panelId = this.popupParentMap.get(wcId);
+      if (panelId) {
+        const view = this.views.get(panelId);
+        if (view && !view.webContents.isDestroyed()) {
+          event.returnValue = view.webContents.getURL();
+          return;
+        }
+      }
+      event.returnValue = '';
+    });
+
+    // IPC: popup preload sends GIS credential → forward to parent panel
+    ipcMain.on('google-login-credential', (_event, data) => {
+      const wcId = _event.sender.id;
+      const panelId = this.popupParentMap.get(wcId);
+      logger.info('[GoogleLogin] Credential received via IPC', {
+        panelId,
+        wcId,
+        dataType: typeof data,
+        keys: data && typeof data === 'object' ? Object.keys(data) : undefined
+      });
+
+      if (panelId) {
+        const view = this.views.get(panelId);
+        if (view && !view.webContents.isDestroyed()) {
+          // GIS sends the credential as a JSON string via postMessage.
+          // We must preserve the original type — passing it through
+          // JSON.parse+stringify would inject an object literal into
+          // executeJavaScript, but GIS expects event.data to be a string
+          // (it does JSON.parse(event.data) internally).
+          const escaped = JSON.stringify(data);
+
+          view.webContents.executeJavaScript(`
+            if (typeof window.__googleLoginReceive === 'function') {
+              window.__googleLoginReceive(${escaped});
+            }
+          `).then(() => logger.info('[GoogleLogin] __googleLoginReceive OK'))
+            .catch((e) => logger.info(`[GoogleLogin] __googleLoginReceive failed: ${e}`));
+        }
+      }
+    });
   }
 
   async refreshConfig(): Promise<void> {
@@ -91,21 +138,23 @@ export class WebPanelHost {
         partition,
         preload: join(__dirname, '../preload/webPanel.js'),
         nodeIntegration: false,
-        contextIsolation: true,
-        sandbox: false,
-        nativeWindowOpen: true
+        contextIsolation: false,
+        sandbox: false
       } as Electron.WebPreferences
     });
 
     this.partitions.set(descriptor.id, partition);
+    if (descriptor.web?.url) {
+      this.panelUrls.set(descriptor.id, descriptor.web.url);
+    }
     this.ensureSessionHandlers(partition);
 
     view.webContents.setBackgroundThrottling(false);
     view.webContents.setVisualZoomLevelLimits(1, 3).catch(() => undefined);
     view.webContents.setWindowOpenHandler(({ url, features }) => {
-      // Google login — allow popup to open naturally so window.open() returns
-      // a real reference (site JS won't show error). Preload only spoofs UA
-      // data and leaves window.opener intact for the OAuth callback.
+      // Google login — use parent's partition so window.opener.postMessage
+      // reaches the parent (different partitions = isolated JS contexts in
+      // Chromium, breaking the GIS callback flow).
       try {
         if (new URL(url).hostname === 'accounts.google.com') {
           return {
@@ -179,41 +228,61 @@ export class WebPanelHost {
 
     view.webContents.on('did-create-window', (popup) => {
       popup.webContents.setUserAgent(CHROME_USER_AGENT);
-
       // Capture ID immediately — popup.webContents is inaccessible after destroy
       const popupId = popup.webContents.id;
       const popupSession = popup.webContents.session;
+
+      // Track popup → parent panel for IPC credential forwarding
+      this.popupParentMap.set(popupId, descriptor.id);
+
+      // Suppress error dialogs from popup renderers
+      popup.webContents.on('render-process-gone', (_e, details) => {
+        logger.info(`[Popup] render-process-gone: ${details.reason}`);
+      });
+      popup.webContents.on('did-fail-load', (_e, errorCode, errorDescription, validatedURL) => {
+        if (errorCode === -3) return; // ERR_ABORTED — expected from redirects
+        logger.info(`[Popup] did-fail-load: ${errorDescription} url=${validatedURL}`);
+      });
+
+      // Relay popup console to main process log
+      popup.webContents.on('console-message', (_e, _level, message) => {
+        logger.info(`[Popup:console] ${message}`);
+      });
 
       // Track popup so onBeforeRequest allows its Google requests through
       this.popupWebContentsIds.add(popupId);
       popup.on('closed', () => {
         this.popupWebContentsIds.delete(popupId);
+        this.popupParentMap.delete(popupId);
       });
 
-      const mainOrigin = (() => {
-        try { return new URL(view.webContents.getURL()).origin; } catch { return ''; }
-      })();
-      let isCrossOrigin = false;
       let isGoogleLogin = false;
+      let closeTimer: ReturnType<typeof setTimeout> | null = null;
 
-      popup.webContents.on('did-navigate', (_e, u) => {
+      const checkCallback = (url: string) => {
         try {
-          const parsed = new URL(u);
-          if (parsed.origin !== mainOrigin) isCrossOrigin = true;
-          // Detect when Google login navigates away to callback URL
-          if (parsed.hostname !== 'accounts.google.com') {
+          const host = new URL(url).hostname;
+          if (!host.endsWith('.google.com') && host !== 'google.com') {
             isGoogleLogin = true;
           }
         } catch { /* */ }
-      });
+      };
+
+      popup.webContents.on('did-navigate', (_e, u) => checkCallback(u));
+      popup.webContents.on('did-navigate-in-page', (_e, u) => checkCallback(u));
 
       popup.webContents.on('did-finish-load', () => {
+        if (!isGoogleLogin) {
+          try {
+            const currentUrl = popup.webContents.getURL();
+            checkCallback(currentUrl);
+          } catch { /* */ }
+        }
         if (!isGoogleLogin) return;
-        // Callback page loaded — wait for SPA to fully process auth code
-        // (exchange code → set cookie → redirect).
-        setTimeout(async () => {
+        if (closeTimer) clearTimeout(closeTimer);
+        logger.info('[Popup] Callback page loaded (did-create-window), resetting 8s close timer');
+        closeTimer = setTimeout(async () => {
           if (popup.isDestroyed()) return;
-          // Flush cookies with timeout guard — flushStore() can hang
           try {
             await Promise.race([
               popupSession.cookies.flushStore(),
@@ -225,11 +294,21 @@ export class WebPanelHost {
       });
 
       popup.on('closed', () => {
-        if (!isCrossOrigin && !isGoogleLogin) return;
-        // Reload parent so it picks up auth cookies set by the popup
-        setTimeout(() => {
-          if (!view.webContents.isDestroyed()) view.webContents.reload();
-        }, 800);
+        this.popupWebContentsIds.delete(popupId);
+        // Reload parent so it picks up the new Google auth state.
+        // 3s delay gives the GIS credential handler time to exchange
+        // the token with the backend and set the session cookie.
+        if (view && !view.webContents.isDestroyed()) {
+          setTimeout(() => {
+            if (view.webContents.isDestroyed()) return;
+            const reloadUrl = this.panelUrls.get(descriptor.id);
+            if (reloadUrl) {
+              view.webContents.loadURL(reloadUrl).catch(() => undefined);
+            } else {
+              view.webContents.reload();
+            }
+          }, 3000);
+        }
       });
     });
 
@@ -448,6 +527,7 @@ export class WebPanelHost {
     this.meta.delete(panelId);
     this.partitions.delete(panelId);
     this.lastGoodUrls.delete(panelId);
+    this.panelUrls.delete(panelId);
     const idx = this.lruOrder.indexOf(panelId);
     if (idx !== -1) this.lruOrder.splice(idx, 1);
   }
@@ -507,7 +587,9 @@ export class WebPanelHost {
           this.openGoogleLoginPopup(
             url,
             this.partitions.get(panelId) ?? SHARED_PARTITION,
-            view
+            view,
+            this.panelUrls.get(panelId),
+            panelId
           );
         }
       } catch { /* ignore */ }
@@ -590,16 +672,21 @@ export class WebPanelHost {
 
   private openGoogleLoginPopup(
     url: string,
-    partition: string,
-    parentView: WebContentsView | null
+    panelPartition: string,
+    parentView: WebContentsView | null,
+    fallbackUrl?: string,
+    panelId?: string
   ): BrowserWindow {
+    logger.info(`[GoogleLogin] Opening popup panelPartition=${panelPartition} fallbackUrl=${fallbackUrl ?? 'none'}`);
+
+    // Use parent's partition so window.opener.postMessage reaches the parent.
     const popup = new BrowserWindow({
       width: 520,
       height: 600,
       autoHideMenuBar: true,
       backgroundColor: '#1B1B1B',
       webPreferences: {
-        partition,
+        partition: panelPartition,
         preload: join(__dirname, '../preload/googleLogin.js'),
         nodeIntegration: false,
         contextIsolation: false,
@@ -610,38 +697,77 @@ export class WebPanelHost {
     // Capture ID/session immediately — popup.webContents is inaccessible after destroy
     const popupId = popup.webContents.id;
     const popupSession = popup.webContents.session;
+    logger.info(`[GoogleLogin] Popup created id=${popupId} sessionPartition=${panelPartition}`);
+
+    // Track popup → parent panel for IPC credential forwarding
+    if (panelId) {
+      this.popupParentMap.set(popupId, panelId);
+    }
 
     // Track popup so onBeforeRequest allows its Google requests through
     this.popupWebContentsIds.add(popupId);
+
+    // Relay popup console to main process log
+    popup.webContents.on('console-message', (_e, _level, message) => {
+      logger.info(`[Popup:console] ${message}`);
+    });
     popup.on('closed', () => {
       this.popupWebContentsIds.delete(popupId);
+      this.popupParentMap.delete(popupId);
+      logger.info(`[GoogleLogin] Popup closed id=${popupId}`);
       if (parentView && !parentView.webContents.isDestroyed()) {
-        setTimeout(() => parentView.webContents.reload(), 800);
+        setTimeout(async () => {
+          if (parentView.webContents.isDestroyed()) return;
+
+          if (fallbackUrl) {
+            logger.info(`[GoogleLogin] Loading fallbackUrl=${fallbackUrl}`);
+            parentView.webContents.loadURL(fallbackUrl).catch(() => undefined);
+          } else {
+            logger.info('[GoogleLogin] Reloading parent');
+            parentView.webContents.reload();
+          }
+        }, 3000);
       }
     });
 
     popup.webContents.setUserAgent(CHROME_USER_AGENT);
 
-    // Don't close popup immediately — let callback page load and process auth code
-    let googleLoginDone = false;
-    popup.webContents.on('did-navigate', (_e, popupUrl) => {
+    let callbackReached = false;
+    const checkCallback = (url: string) => {
       try {
-        if (new URL(popupUrl).hostname !== 'accounts.google.com') {
-          googleLoginDone = true;
+        const host = new URL(url).hostname;
+        if (!host.endsWith('.google.com') && host !== 'google.com') {
+          if (!callbackReached) {
+            callbackReached = true;
+            logger.info('[GoogleLogin] Callback URL detected, will auto-close after 8s');
+          }
         }
       } catch { /* */ }
+    };
+    popup.webContents.on('did-navigate', (_e, popupUrl) => {
+      logger.info(`[GoogleLogin] Popup navigated to: ${popupUrl}`);
+      checkCallback(popupUrl);
     });
+    popup.webContents.on('did-navigate-in-page', (_e, popupUrl) => checkCallback(popupUrl));
+    let closeTimer: ReturnType<typeof setTimeout> | null = null;
     popup.webContents.on('did-finish-load', () => {
-      if (!googleLoginDone) return;
-      // Callback page loaded — wait for SPA to fully process auth code
-      setTimeout(async () => {
+      if (!callbackReached) {
+        try { checkCallback(popup.webContents.getURL()); } catch { /* */ }
+      }
+      if (!callbackReached) return;
+      if (closeTimer) clearTimeout(closeTimer);
+      logger.info('[GoogleLogin] Callback page loaded, resetting 8s auto-close timer');
+      closeTimer = setTimeout(async () => {
         if (popup.isDestroyed()) return;
         try {
           await Promise.race([
             popupSession.cookies.flushStore(),
             new Promise(r => setTimeout(r, 3000))
           ]);
-        } catch { /* */ }
+          logger.info('[GoogleLogin] Cookie store flushed');
+        } catch (e) {
+          logger.info(`[GoogleLogin] Cookie flush failed: ${e}`);
+        }
         popup.close();
       }, 8000);
     });
@@ -663,23 +789,44 @@ export class WebPanelHost {
     ses.webRequest.onBeforeRequest(
       { urls: ['https://accounts.google.com/*'] },
       (details, callback) => {
-        if (
-          details.resourceType === 'mainFrame' &&
-          !this.popupWebContentsIds.has(details.webContents.id)
-        ) {
-          this.openGoogleLoginPopup(
-            details.url,
-            partition,
-            this.views.get(
-              [...this.views.entries()].find(
-                ([, v]) => v.webContents.id === details.webContents.id
-              )?.[0] ?? ''
-            ) ?? null
-          );
-          callback({ cancel: true });
+        if (details.resourceType !== 'mainFrame' || !details.webContents) {
+          callback({});
           return;
         }
-        callback({});
+
+        const entry = [...this.views.entries()].find(
+          ([, v]) => v.webContents.id === details.webContents!.id
+        );
+
+        // Only intercept navigations from known panel views.
+        // Popups (including Google login) aren't in this.views, so their
+        // requests pass through — no need to track popup IDs separately.
+        if (!entry) {
+          callback({});
+          return;
+        }
+
+        const panelId = entry[0];
+        const parentView = entry[1];
+        logger.info('[onBeforeRequest] Google redirect intercepted', { panelId, partition, panelUrl: panelId ? this.panelUrls.get(panelId) : undefined });
+
+        this.openGoogleLoginPopup(
+          details.url,
+          partition,
+          parentView,
+          panelId ? this.panelUrls.get(panelId) : undefined,
+          panelId
+        );
+        callback({ cancel: true });
+
+        // Restore panel to last good URL so reload() after popup close
+        // doesn't retry the cancelled redirect target.
+        if (panelId && parentView && !parentView.webContents.isDestroyed()) {
+          const restoreUrl = this.lastGoodUrls.get(panelId);
+          if (restoreUrl) {
+            parentView.webContents.loadURL(restoreUrl).catch(() => undefined);
+          }
+        }
       }
     );
 
@@ -693,15 +840,30 @@ export class WebPanelHost {
       callback(this.isNotificationAllowed(webContents.getURL()));
     });
 
-    ses.webRequest.onBeforeSendHeaders(
-      { urls: ['https://accounts.google.com/*', 'https://*.google.com/*', 'https://google.com/*'] },
+    // Temporarily disabled to test if header modification causes Google login failure
+    // ses.webRequest.onBeforeSendHeaders(
+    //   { urls: ['https://accounts.google.com/*', 'https://*.google.com/*', 'https://google.com/*'] },
+    //   (details, callback) => {
+    //     delete details.requestHeaders['Sec-Ch-Ua'];
+    //     delete details.requestHeaders['Sec-Ch-Ua-Mobile'];
+    //     delete details.requestHeaders['Sec-Ch-Ua-Platform'];
+    //     details.requestHeaders['User-Agent'] = CHROME_USER_AGENT;
+    //     callback({ requestHeaders: details.requestHeaders });
+    //   }
+    // );
+
+    // Strip Cross-Origin-Opener-Policy from Google responses so the popup's
+    // window.opener.postMessage() can reach the parent panel.
+    // Google sends COOP: same-origin which severs the opener relationship.
+    ses.webRequest.onHeadersReceived(
+      { urls: ['https://accounts.google.com/*', 'https://*.google.com/*'] },
       (details, callback) => {
-        delete details.requestHeaders['Sec-Ch-Ua'];
-        delete details.requestHeaders['Sec-Ch-Ua-Mobile'];
-        delete details.requestHeaders['Sec-Ch-Ua-Platform'];
-        details.requestHeaders['Sec-Fetch-Dest'] = 'document';
-        details.requestHeaders['User-Agent'] = CHROME_USER_AGENT;
-        callback({ requestHeaders: details.requestHeaders });
+        const h = details.responseHeaders;
+        if (h) {
+          delete h['cross-origin-opener-policy'];
+          delete h['cross-origin-embedder-policy'];
+        }
+        callback({ responseHeaders: h });
       }
     );
 

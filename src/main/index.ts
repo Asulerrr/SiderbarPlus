@@ -17,6 +17,14 @@ import { TrayManager } from './tray/TrayManager';
 import { logger } from './utils/logger';
 import { WindowManager } from './windows/WindowManager';
 
+// Suppress uncaught exception dialogs — log instead
+process.on('uncaughtException', (error) => {
+  logger.error('Uncaught exception', error);
+});
+process.on('unhandledRejection', (reason) => {
+  logger.error('Unhandled rejection', reason);
+});
+
 let windowManager: WindowManager | null = null;
 let trayManager: TrayManager | null = null;
 let configStoreRef: ConfigStore | null = null;
