@@ -100,10 +100,12 @@ export default function App(): JSX.Element {
   const edge = payload?.edge ?? 'right';
   const surface = useMemo(
     () =>
-      config
-        ? resolveSurfaceColors(config.appearance, true)
-        : { bg: '#1b1b1b', fg: '#FFFFFFE6' },
-    [config]
+      payload?.appearance
+        ? resolveSurfaceColors(payload.appearance, true)
+        : config
+          ? resolveSurfaceColors(config.appearance, true)
+          : { bg: '#1b1b1b', fg: '#FFFFFFE6' },
+    [payload?.appearance, config]
   );
   const panelCardRadius = edge === 'right' ? 'rounded-l-lg' : 'rounded-r-lg';
   const panelCardBorder = edge === 'right' ? 'border-r-0' : 'border-l-0';

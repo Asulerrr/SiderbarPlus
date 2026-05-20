@@ -5,44 +5,25 @@ import { IPC_CHANNELS } from '../shared/ipc-contracts';
 // as mouse moves over website content with varying cursor styles.
 webFrame.insertCSS('*,*::before,*::after,a,button,input,textarea,select,[role=button],[onclick]{cursor:default!important}');
 
-// --- Google login GIS handler interception ---
-// With contextIsolation: false, this preload and the page share the same
-// window object. We override addEventListener to capture GIS's 'message'
-// handler, then expose __googleLoginReceive for the main process to call
-// with the credential. We construct a proper MessageEvent with
-// event.source = window so GIS's security check passes (the panel's own
-// window is what GIS expects as the "opener" that receives the credential).
-let capturedGISHandler: ((ev: MessageEvent) => void) | null = null;
-
-try {
-  const origAddEventListener = window.addEventListener.bind(window);
-  window.addEventListener = function (
-    type: string,
-    listener: EventListenerOrEventListenerObject | null,
-    options?: boolean | AddEventListenerOptions
-  ) {
-    if (type === 'message' && typeof listener === 'function') {
-      capturedGISHandler = listener as (ev: MessageEvent) => void;
-    }
-    return origAddEventListener(type, listener, options);
-  } as typeof window.addEventListener;
-} catch { /* */ }
-
+// --- Google login GIS credential relay ---
+// With contextIsolation: false the main process can call this function
+// via executeJavaScript. We dispatch a real MessageEvent on the window
+// so ALL registered 'message' listeners receive it — no need to capture
+// individual handlers (which is fragile if the page registers multiple
+// listeners or if GIS initialises late).
 (window as any).__googleLoginReceive = (data: unknown): void => {
-  if (capturedGISHandler) {
-    try {
-      const event = new MessageEvent('message', {
-        data,
-        origin: 'https://accounts.google.com',
-        source: window
-      });
-      capturedGISHandler(event);
-    } catch (e) {
-      console.error('[webPanel] GIS handler call failed:', e);
-    }
+  try {
+    const event = new MessageEvent('message', {
+      data,
+      origin: 'https://accounts.google.com',
+      source: window
+    });
+    window.dispatchEvent(event);
+  } catch (e) {
+    console.error('[webPanel] GIS dispatch failed:', e);
   }
 };
-// --- end Google login interception ---
+// --- end Google login relay ---
 
 let lastCancelAt = 0;
 

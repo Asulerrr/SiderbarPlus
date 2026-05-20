@@ -2,7 +2,7 @@ import { BrowserWindow, screen, WebContentsView } from 'electron';
 import { BUILTIN_ADD_SITE_ID, BUILTIN_SETTINGS_ID } from '../../shared/constants';
 import { IPC_CHANNELS } from '../../shared/ipc-contracts';
 import { buildBuiltinPanelId, parseBuiltinPanelId } from '../../shared/builtinPanels';
-import type { AppConfig, Edge, PanelDescriptor, PanelState, SiteInfo } from '../../shared/types';
+import type { AppConfig, AppearanceConfig, Edge, PanelDescriptor, PanelState, SiteInfo } from '../../shared/types';
 import { logger } from '../utils/logger';
 import type { ConfigStore } from '../store/ConfigStore';
 import type { PanelAnimationWindow } from '../windows/PanelAnimationWindow';
@@ -153,7 +153,7 @@ export class PanelManager {
     this.raisePanelWindows();
     this.panelWindowRef.setIgnoreMouseEvents(false);
 
-    this.sendAnimationOpen(descriptor, config.layout.edge, this.snapshots.get(panelId) ?? null);
+    this.sendAnimationOpen(descriptor, config.layout.edge, this.snapshots.get(panelId) ?? null, config.appearance);
 
     await sleep(OPEN_ANIMATION_MS);
     if (token !== this.lifecycleToken || this.state !== 'opening' || this.currentPanelId !== panelId) {
@@ -279,7 +279,8 @@ export class PanelManager {
         descriptor,
         config.layout.edge,
         snapshotDataUrl ?? this.snapshots.get(descriptor.id) ?? null,
-        CLOSE_ANIMATION_DELAY_MS
+        CLOSE_ANIMATION_DELAY_MS,
+        config.appearance
       );
     }
 
@@ -796,7 +797,7 @@ export class PanelManager {
     });
   }
 
-  private sendAnimationOpen(descriptor: PanelDescriptor, edge: Edge, snapshotDataUrl: string | null): void {
+  private sendAnimationOpen(descriptor: PanelDescriptor, edge: Edge, snapshotDataUrl: string | null, appearance?: AppearanceConfig): void {
     this.animationWindowRef.setAlwaysOnTop(true, 'screen-saver');
     this.animationWindowRef.moveTop();
     this.dockWindowRef.moveTop();
@@ -805,7 +806,8 @@ export class PanelManager {
       descriptor,
       edge,
       url: this.getDescriptorUrl(descriptor),
-      snapshotDataUrl
+      snapshotDataUrl,
+      appearance
     });
   }
 
@@ -813,7 +815,8 @@ export class PanelManager {
     descriptor: PanelDescriptor,
     edge: Edge,
     snapshotDataUrl: string | null,
-    animationDelayMs = 0
+    animationDelayMs = 0,
+    appearance?: AppearanceConfig
   ): void {
     this.animationWindowRef.webContents.send(IPC_CHANNELS.panelAnimationClose, {
       panelId: descriptor.id,
@@ -821,7 +824,8 @@ export class PanelManager {
       edge,
       url: this.getDescriptorUrl(descriptor),
       snapshotDataUrl,
-      animationDelayMs
+      animationDelayMs,
+      appearance
     });
   }
 

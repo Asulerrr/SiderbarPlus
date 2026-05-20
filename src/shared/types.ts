@@ -108,6 +108,7 @@ export interface PanelAnimationPayload {
   url: string;
   snapshotDataUrl: string | null;
   animationDelayMs?: number;
+  appearance?: AppearanceConfig;
 }
 
 export interface PanelNavigationPayload {
