@@ -300,6 +300,10 @@ export default function App(): JSX.Element {
 
   const applyPayload = async (payload: PanelAnimatePayload | PanelChromePayload): Promise<void> => {
     const token = ++hydrationTokenRef.current;
+    // Apply appearance from payload immediately to avoid color flash
+    if (payload.appearance) {
+      setConfig((prev) => prev ? { ...prev, appearance: payload.appearance! } : prev);
+    }
     setChromeState((prev) => ({ ...buildChromeState(payload.descriptor, payload.edge, payload.url, config), panelMode: prev.panelMode }));
 
     const nextConfig = await loadConfig();

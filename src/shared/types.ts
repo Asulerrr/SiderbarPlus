@@ -88,12 +88,14 @@ export interface PanelAnimatePayload {
   url: string;
   snapshotDataUrl?: string | null;
   animationDelayMs?: number;
+  appearance?: AppearanceConfig;
 }
 
 export interface PanelChromePayload {
   descriptor: PanelDescriptor;
   edge: Edge;
   url: string;
+  appearance?: AppearanceConfig;
 }
 
 export interface PanelSnapshotPayload {

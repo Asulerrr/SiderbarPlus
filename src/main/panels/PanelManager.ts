@@ -135,7 +135,7 @@ export class PanelManager {
       ++this.lifecycleToken;
       this.currentPanelId = panelId;
       this.applyPanelBounds(descriptor, config);
-      await this.switchPanel(descriptor, config.layout.edge);
+      await this.switchPanel(descriptor, config.layout.edge, config.appearance);
       this.emitState(config.layout.edge, this.panelMode);
       return;
     }
@@ -160,7 +160,7 @@ export class PanelManager {
       return;
     }
 
-    this.sendAnimateIn(descriptor, config.layout.edge, this.snapshots.get(panelId) ?? null);
+    this.sendAnimateIn(descriptor, config.layout.edge, this.snapshots.get(panelId) ?? null, config.appearance);
     this.panelWindowRef.setOpacity(0);
     this.attachDescriptorView(descriptor, config.layout.edge);
     await sleep(PANEL_WINDOW_SHOW_SETTLE_MS);
@@ -558,7 +558,7 @@ export class PanelManager {
     }
   }
 
-  private async switchPanel(descriptor: PanelDescriptor, edge: Edge): Promise<void> {
+  private async switchPanel(descriptor: PanelDescriptor, edge: Edge, appearance?: AppearanceConfig): Promise<void> {
     const token = ++this.switchToken;
     this.pendingDestroyId = null;
     if (this.panelMode === 'hover') {
@@ -580,7 +580,8 @@ export class PanelManager {
     this.panelWindowRef.webContents.send(IPC_CHANNELS.chromeFadeIn, {
       descriptor,
       edge,
-      url: this.getDescriptorUrl(descriptor)
+      url: this.getDescriptorUrl(descriptor),
+      appearance
     });
 
     this.state = 'open';
@@ -785,13 +786,14 @@ export class PanelManager {
     });
   }
 
-  private sendAnimateIn(descriptor: PanelDescriptor, edge: Edge, snapshotDataUrl: string | null): void {
+  private sendAnimateIn(descriptor: PanelDescriptor, edge: Edge, snapshotDataUrl: string | null, appearance?: AppearanceConfig): void {
     this.panelWindowRef.webContents.send(IPC_CHANNELS.panelAnimateIn, {
       panelId: descriptor.id,
       descriptor,
       edge,
       url: this.getDescriptorUrl(descriptor),
-      snapshotDataUrl
+      snapshotDataUrl,
+      appearance
     });
   }
 

@@ -127,15 +127,16 @@ export default function App(): JSX.Element {
         style={{ transform, transition, backgroundColor: surface.bg }}
       >
         <div
-          className={`absolute flex flex-col overflow-hidden border border-white/[0.05] bg-[#202020] shadow-[0_0_0_1px_rgba(0,0,0,0.18)] ${panelCardRadius} ${panelCardBorder}`}
+          className={`absolute flex flex-col overflow-hidden border border-white/[0.05] shadow-[0_0_0_1px_rgba(0,0,0,0.18)] ${panelCardRadius} ${panelCardBorder}`}
           style={{
             left: edge === 'right' ? CONTENT_INSET : 0,
             right: edge === 'left' ? CONTENT_INSET : 0,
             top: PANEL_TOP_INSET,
-            bottom: CONTENT_INSET
+            bottom: CONTENT_INSET,
+            backgroundColor: surface.bg
           }}
         >
-          <div className="flex h-[76px] shrink-0 items-center justify-between bg-[#202020] px-4">
+          <div className="flex h-[76px] shrink-0 items-center justify-between px-4" style={{ backgroundColor: surface.bg }}>
             <div className="flex min-w-0 flex-1 flex-col justify-center gap-1 pr-3">
               <div className="min-w-0 truncate text-[15px] font-semibold leading-5 text-white">
                 {payload?.descriptor.title ?? 'SideBar'}
