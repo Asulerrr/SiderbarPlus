@@ -831,11 +831,16 @@ export class WebPanelHost {
     );
 
     ses.setPermissionCheckHandler((_webContents, permission, requestingOrigin) => {
+      if (permission === 'clipboard-read' || permission === 'clipboard-sanitized-write') return true;
       if (permission !== 'notifications') return false;
       return this.isNotificationAllowed(requestingOrigin);
     });
 
     ses.setPermissionRequestHandler((webContents, permission, callback) => {
+      if (permission === 'clipboard-read' || permission === 'clipboard-sanitized-write') {
+        callback(true);
+        return;
+      }
       if (permission !== 'notifications') { callback(false); return; }
       callback(this.isNotificationAllowed(webContents.getURL()));
     });
