@@ -568,7 +568,7 @@ export class PanelManager {
 
     this.panelWindowRef.webContents.send(IPC_CHANNELS.chromeFadeOut);
     await sleep(60);
-    if (token !== this.switchToken) {
+    if (token !== this.switchToken || this.currentPanelId !== descriptor.id) {
       return;
     }
 
@@ -583,10 +583,8 @@ export class PanelManager {
       url: this.getDescriptorUrl(descriptor)
     });
 
-    this.currentPanelId = descriptor.id;
     this.state = 'open';
 
-    // 同 showPanel：settings 面板需要取焦点以支持点击外部自动收起。
     if (descriptor.id === BUILTIN_SETTINGS_ID) {
       this.panelWindowRef.focus();
     }

@@ -47,6 +47,10 @@ export const registerConfigHandlers = (
         if (before.layout.edge !== config.layout.edge) {
           windowManager.applyEdgeChange(config);
         }
+        // displayId 变化时重定位窗口到目标显示器
+        if (before.layout.displayId !== config.layout.displayId) {
+          windowManager.applyEdgeChange(config);
+        }
         // hideOnFullscreen 变化时启停 watcher（PRD §5.9.4）
         if (before.app.hideOnFullscreen !== config.app.hideOnFullscreen) {
           if (config.app.hideOnFullscreen) {

@@ -24,9 +24,10 @@ const RECT = koffi.struct('RECT', {
 type Rect = { left: number; top: number; right: number; bottom: number };
 
 interface User32 {
-  GetForegroundWindow: () => unknown; // 返回 HWND 指针
+  GetForegroundWindow: () => unknown;
   GetWindowRect: (hwnd: unknown, rect: Rect) => number;
   GetClassNameA: (hwnd: unknown, buf: Buffer, max: number) => number;
+  GetWindowLongPtrA: (hwnd: unknown, index: number) => number;
 }
 
 const loadUser32 = (): User32 | null => {
@@ -40,6 +41,9 @@ const loadUser32 = (): User32 | null => {
       GetWindowRect: lib.func('int __stdcall GetWindowRect(void *hwnd, _Out_ RECT *rect)') as never,
       GetClassNameA: lib.func(
         'int __stdcall GetClassNameA(void *hwnd, char *lpClassName, int nMaxCount)'
+      ) as never,
+      GetWindowLongPtrA: lib.func(
+        'long __stdcall GetWindowLongPtrA(void *hwnd, int nIndex)'
       ) as never
     };
   } catch (error) {
@@ -58,7 +62,14 @@ const SHELL_WINDOW_CLASSES = new Set([
   'Shell_SecondaryTrayWnd',
   'ScreenClippingHost',
   'SnippingToolHost',
-  'SnippingTool'
+  'SnippingTool',
+  // Third-party screenshot / overlay tools
+  'Snipaste',
+  'Qt5152QWindowIcon',     // Snipaste Qt window class
+  'Qt5QWindowIcon',
+  'DUIViewWndClassName',   // ShareX
+  'UnityWndClass',         // Greenshot overlay
+  'CabinetWClass'          // Explorer overlay (Win+Shift+S)
 ]);
 
 const ENTER_FULLSCREEN_CHECKS = 10;
@@ -154,6 +165,21 @@ export class FullscreenWatcher {
         }
         return;
       }
+
+      // 排除 WS_EX_TOOLWINDOW (0x00000080) 或 WS_EX_TOPMOST (0x00000008) 窗口。
+      // 截图工具（Snipaste、FastStone 等）的全屏覆盖层通常带有这些样式。
+      const GWL_EXSTYLE = -20;
+      const WS_EX_TOOLWINDOW = 0x00000080;
+      try {
+        const exStyle = this.user32.GetWindowLongPtrA(hwndPtr, GWL_EXSTYLE);
+        if (exStyle & WS_EX_TOOLWINDOW) {
+          if (this.isFullscreenActive) {
+            this.isFullscreenActive = false;
+            this.onExitFullscreen();
+          }
+          return;
+        }
+      } catch { /* */ }
 
       const rect: Rect = { left: 0, top: 0, right: 0, bottom: 0 };
       if (!this.user32.GetWindowRect(hwndPtr, rect)) return;
