@@ -62,6 +62,7 @@ export class WebPanelHost {
   private readonly sessionsWithHandlers = new Set<string>();
   private readonly popupWebContentsIds = new Set<number>();
   private readonly panelUrls = new Map<string, string>();
+  private readonly translatePanelIds = new Set<string>();
   private readonly popupParentMap = new Map<number, string>(); // popup wcId → parent panelId
 
   constructor(private readonly dependencies: WebPanelHostDependencies) {
@@ -360,7 +361,8 @@ export class WebPanelHost {
       currentUrl: this.getCurrentUrl(panelId, descriptor.web.url),
       userAgentMode: descriptor.web.userAgentMode,
       notificationsSnoozed: descriptor.web.notificationsSnoozed ?? false,
-      canOpenExternal: true
+      canOpenExternal: true,
+      translateEnabled: this.translatePanelIds.has(panelId)
     };
   }
 
@@ -410,6 +412,31 @@ export class WebPanelHost {
     await this.updatePanelWebConfig(panelId, {
       notificationsSnoozed: !(descriptor.web.notificationsSnoozed ?? false)
     });
+
+    return this.getMenuState(panelId);
+  }
+
+  async toggleTranslate(panelId: string): Promise<PanelMenuState | null> {
+    const config = await this.getFreshConfig();
+    const descriptor = config.panels.find((panel) => panel.id === panelId);
+    if (!descriptor?.web) {
+      return this.getMenuState(panelId);
+    }
+
+    const view = this.getView(panelId);
+    if (!view || view.webContents.isDestroyed()) {
+      return this.getMenuState(panelId);
+    }
+
+    if (this.translatePanelIds.has(panelId)) {
+      this.translatePanelIds.delete(panelId);
+      view.webContents.loadURL(descriptor.web.url).catch(() => {});
+    } else {
+      this.translatePanelIds.add(panelId);
+      const currentUrl = this.getCurrentUrl(panelId, descriptor.web.url);
+      const translateUrl = `https://translate.google.com/translate?hl=zh-CN&sl=auto&tl=zh-CN&u=${encodeURIComponent(currentUrl)}`;
+      view.webContents.loadURL(translateUrl).catch(() => {});
+    }
 
     return this.getMenuState(panelId);
   }
@@ -545,6 +572,12 @@ export class WebPanelHost {
       logger.info(`WebPanelHost: evicting LRU view ${victim}`);
       this.destroyView(victim);
     }
+  }
+
+  isViewLoading(panelId: string): boolean {
+    const view = this.views.get(panelId);
+    if (!view || view.webContents.isDestroyed()) return false;
+    return view.webContents.isLoading();
   }
 
   private async getFreshConfig(): Promise<AppConfig> {

@@ -10,6 +10,7 @@ export interface WebPanelConfig {
   notificationsSnoozed?: boolean;
   isolatedSession?: boolean;
   sessionGroup?: string;
+  translateEnabled?: boolean;
 }
 
 export interface BuiltinPanelConfig {
@@ -96,6 +97,7 @@ export interface PanelChromePayload {
   edge: Edge;
   url: string;
   appearance?: AppearanceConfig;
+  isLoading?: boolean;
 }
 
 export interface PanelSnapshotPayload {
@@ -131,6 +133,7 @@ export interface PanelMenuState {
   userAgentMode: 'desktop' | 'mobile';
   notificationsSnoozed: boolean;
   canOpenExternal: boolean;
+  translateEnabled: boolean;
 }
 
 export interface PanelMenuAnchor {
@@ -158,6 +161,7 @@ export interface PanelMenuActionPayload extends PanelActionPayload {
     | 'copy-link'
     | 'toggle-mobile-view'
     | 'toggle-notifications-snooze'
+    | 'toggle-translate'
     | 'open-edit-site'
     | 'clear-site-data'
     | 'open-site-info';

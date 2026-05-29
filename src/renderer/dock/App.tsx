@@ -124,7 +124,7 @@ export default function App(): JSX.Element {
     }
     const result = await window.dockAPI.showPanel(id);
     if (result.ok) {
-      setPanelState((current) => ({ ...current, activePanelId: id, panelVisible: false }));
+      setPanelState((current) => ({ ...current, activePanelId: id }));
     }
   };
 

@@ -1,5 +1,5 @@
 export const PANEL_MENU_WIDTH = 224;
-export const PANEL_MENU_ITEM_COUNT = 7;
+export const PANEL_MENU_ITEM_COUNT = 8;
 export const PANEL_MENU_SEPARATOR_COUNT = 1;
 
 const PANEL_MENU_ITEM_HEIGHT = 32;

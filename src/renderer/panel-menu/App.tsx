@@ -2,6 +2,7 @@ import {
   BellOff,
   Check,
   Info,
+  Languages,
   Link as LinkIcon,
   Pencil,
   RotateCw,
@@ -32,6 +33,7 @@ export default function App(): JSX.Element {
       | 'copy-link'
       | 'toggle-mobile-view'
       | 'toggle-notifications-snooze'
+      | 'toggle-translate'
       | 'open-edit-site'
       | 'clear-site-data'
       | 'open-site-info'
@@ -109,6 +111,15 @@ export default function App(): JSX.Element {
           {state?.notificationsSnoozed ? <Check size={14} className="text-white/72" /> : null}
         </button>
         <div className="my-1 h-px bg-white/8" />
+        <button
+          type="button"
+          className="flex h-8 w-full items-center gap-2 rounded-md px-3 text-left text-sm text-white transition-colors hover:bg-white/30"
+          onClick={() => void handleAction('toggle-translate')}
+        >
+          <Languages size={14} className="text-white/72" />
+          <span className="flex-1">翻译此站点</span>
+          {state?.translateEnabled ? <Check size={14} className="text-white/72" /> : null}
+        </button>
         <button
           type="button"
           className="flex h-8 w-full items-center gap-2 rounded-md px-3 text-left text-sm text-white transition-colors hover:bg-white/30"

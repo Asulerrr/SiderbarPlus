@@ -234,6 +234,7 @@ export class WindowManager {
       | 'copy-link'
       | 'toggle-mobile-view'
       | 'toggle-notifications-snooze'
+      | 'toggle-translate'
       | 'open-edit-site'
       | 'clear-site-data'
       | 'open-site-info'

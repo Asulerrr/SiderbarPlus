@@ -9,8 +9,8 @@ const PANEL_TOP_INSET = 8;
 type AnimationPhase = 'closed' | 'opening' | 'open' | 'closing';
 type Direction = 'opening' | 'closing';
 
-const OPEN_TRANSITION = 'transform 150ms cubic-bezier(0.2, 0, 0, 1)';
-const CLOSE_TRANSITION = 'transform 150ms cubic-bezier(0.4, 0, 1, 1)';
+const OPEN_TRANSITION = 'transform 300ms cubic-bezier(0.22, 0, 0, 1)';
+const CLOSE_TRANSITION = 'transform 280ms cubic-bezier(0.4, 0, 0.6, 1)';
 
 export default function App(): JSX.Element {
   const [payload, setPayload] = useState<PanelAnimationPayload | null>(null);
@@ -59,7 +59,7 @@ export default function App(): JSX.Element {
       }, 20);
       const finishTimer = window.setTimeout(() => {
         setPhase('open');
-      }, 170);
+      }, 320);
 
       timersRef.current = [startTimer, finishTimer];
     };
@@ -76,7 +76,7 @@ export default function App(): JSX.Element {
       }, startDelayMs);
       const finishTimer = window.setTimeout(() => {
         setPhase('closed');
-      }, startDelayMs + 150);
+      }, startDelayMs + 300);
 
       timersRef.current = [startTimer, finishTimer];
     };

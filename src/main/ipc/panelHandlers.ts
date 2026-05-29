@@ -225,9 +225,7 @@ export const registerPanelHandlers = (
 
   ipcMain.handle(IPC_CHANNELS.panelsShow, async (_event, payload: { id: string }) => {
     try {
-      const config = await configStore.read();
       await windowManager.showPanel(payload.id, true);
-
       return { ok: true, data: undefined };
     } catch (error) {
       logger.error('panels:show failed', error);

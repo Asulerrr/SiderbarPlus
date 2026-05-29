@@ -116,6 +116,7 @@ export default function App(): JSX.Element {
   });
   const [fading, setFading] = useState(false);
   const [contentSnapshotDataUrl, setContentSnapshotDataUrl] = useState<string | null>(null);
+  const [isViewLoading, setIsViewLoading] = useState(false);
   const [addSiteUrl, setAddSiteUrl] = useState('');
   const [selectedBrowserId, setSelectedBrowserId] = useState('system');
   const [sessionGroup, setSessionGroup] = useState('');
@@ -361,6 +362,7 @@ export default function App(): JSX.Element {
     const disposeFadeIn = window.panelAPI.onChromeFadeIn((payload) => {
       void applyPayload(payload);
       setFading(false);
+      setIsViewLoading(payload.isLoading ?? false);
     });
 
     const disposeNavigation = window.panelAPI.onNavigationState((payload: PanelNavigationPayload) => {
@@ -380,6 +382,7 @@ export default function App(): JSX.Element {
         setLoadingVisible(true);
         setLoadingWidth(70);
       } else {
+        setIsViewLoading(false);
         setLoadingWidth(100);
         loadingTimerRef.current = setTimeout(() => {
           setLoadingDone(true);
@@ -433,6 +436,7 @@ export default function App(): JSX.Element {
     setLoadingVisible(false);
     setLoadingWidth(0);
     setLoadingDone(false);
+    setIsViewLoading(false);
   }, [chromeState.panelId]);
 
   useEffect(() => {
@@ -1020,6 +1024,14 @@ export default function App(): JSX.Element {
                 draggable={false}
                 className="absolute inset-0 h-full w-full object-fill"
               />
+            ) : isViewLoading ? (
+              <div className="absolute inset-0 flex flex-col gap-4 bg-[#242424] p-4">
+                <div className="panel-loading-skeleton h-4 w-3/4 rounded" />
+                <div className="panel-loading-skeleton h-4 w-1/2 rounded" />
+                <div className="panel-loading-skeleton h-4 w-5/6 rounded" />
+                <div className="panel-loading-skeleton h-4 w-2/3 rounded" />
+                <div className="panel-loading-skeleton h-32 w-full rounded-lg mt-2" />
+              </div>
             ) : (
               <div className="absolute inset-0 flex items-start justify-start bg-[#242424] p-4">
                 <div className="h-2 w-2 rounded-full border border-white/18" />

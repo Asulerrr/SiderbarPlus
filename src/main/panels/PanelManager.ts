@@ -16,8 +16,8 @@ export { clampPanelWidth } from './panelResize.ts';
 import { clampPanelWidth as _clampPanelWidth } from './panelResize.ts';
 
 const CHROME_HEIGHT = 76;
-const OPEN_ANIMATION_MS = 170;
-const CLOSE_ANIMATION_MS = 170;
+const OPEN_ANIMATION_MS = 300;
+const CLOSE_ANIMATION_MS = 280;
 const SNAPSHOT_PAINT_MS = 50;
 const PANEL_WINDOW_SHOW_SETTLE_MS = 180;
 const CLOSE_ANIMATION_DELAY_MS = 70;
@@ -120,11 +120,14 @@ export class PanelManager {
 
     this.cancelCloseTimer();
     this.sticky = sticky;
+    if (sticky) {
+      this.panelMode = 'pinned';
+    }
     this.applyHoverConfig(config);
     this.startPointerTracking();
 
     if (this.currentPanelId && this.currentPanelId !== panelId && this.state !== 'closed') {
-      if (this.state === 'closing') {
+      if (this.state === 'closing' || this.state === 'opening') {
         this.state = 'open';
         this.raisePanelWindows();
         this.panelWindowRef.setOpacity(1);
@@ -364,6 +367,8 @@ export class PanelManager {
         return this.webPanelHost.toggleMobileView(panelId);
       case 'toggle-notifications-snooze':
         return this.webPanelHost.toggleNotificationsSnooze(panelId);
+      case 'toggle-translate':
+        return this.webPanelHost.toggleTranslate(panelId);
       case 'open-edit-site':
         await this.showPanel(buildBuiltinPanelId('edit-site', panelId), true);
         return this.webPanelHost.getMenuState(panelId);
@@ -572,23 +577,74 @@ export class PanelManager {
       return;
     }
 
-    this.attachDescriptorView(descriptor, edge);
-    if (descriptor.type === 'web') {
-      this.webPanelHost.applyMuteState(descriptor.id, false);
-    }
+    // Phase 1: get or create the view (starts loading if new)
+    const view = this.prepareView(descriptor, edge);
 
+    const isLoading = descriptor.type === 'web' && this.webPanelHost.isViewLoading(descriptor.id);
+
+    // Send chromeFadeIn with loading state — renderer shows skeleton while loading
     this.panelWindowRef.webContents.send(IPC_CHANNELS.chromeFadeIn, {
       descriptor,
       edge,
       url: this.getDescriptorUrl(descriptor),
-      appearance
+      appearance,
+      isLoading
     });
+
+    // Emit state immediately so dock icon updates without waiting for view load
+    this.emitState(this.edge, this.panelMode);
+
+    if (isLoading && view) {
+      await this.waitForViewReady(view, token);
+      if (token !== this.switchToken || this.currentPanelId !== descriptor.id) {
+        return;
+      }
+    }
+
+    // Phase 2: attach view to contentView (deferred until loaded)
+    this.finishViewAttach(view, edge);
+    if (descriptor.type === 'web') {
+      this.webPanelHost.applyMuteState(descriptor.id, false);
+    }
 
     this.state = 'open';
 
     if (descriptor.id === BUILTIN_SETTINGS_ID) {
       this.panelWindowRef.focus();
     }
+  }
+
+  private waitForViewReady(view: WebContentsView, token: number, timeoutMs = 5000): Promise<void> {
+    return new Promise((resolve) => {
+      if (!view.webContents.isLoading()) {
+        resolve();
+        return;
+      }
+      const timeout = setTimeout(() => resolve(), timeoutMs);
+      const onFinish = (): void => {
+        clearTimeout(timeout);
+        resolve();
+      };
+      view.webContents.once('did-finish-load', onFinish);
+      view.webContents.once('did-fail-load', onFinish);
+    });
+  }
+
+  private prepareView(descriptor: PanelDescriptor, edge: Edge): WebContentsView | null {
+    // Remove old view immediately so React skeleton shows through while loading
+    this.setActiveView(null);
+    if (descriptor.type !== 'web') {
+      return null;
+    }
+    const view = this.webPanelHost.getOrCreateView(descriptor);
+    this.updateViewBounds(view, edge);
+    this.bindViewEvents(descriptor, view);
+    return view;
+  }
+
+  private finishViewAttach(view: WebContentsView | null, edge: Edge): void {
+    if (!view) return;
+    this.setActiveView(view);
   }
 
   private panelMaxWidthPercent = 60;
