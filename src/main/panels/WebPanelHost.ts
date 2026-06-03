@@ -87,6 +87,7 @@ export class WebPanelHost {
     ipcMain.on('google-login-credential', (_event, data) => {
       const wcId = _event.sender.id;
       const panelId = this.popupParentMap.get(wcId);
+      const popupWindow = BrowserWindow.fromWebContents(_event.sender);
       logger.info('[GoogleLogin] Credential received via IPC', {
         panelId,
         wcId,
@@ -111,6 +112,27 @@ export class WebPanelHost {
           `).then(() => logger.info('[GoogleLogin] __googleLoginReceive OK'))
             .catch((e) => logger.info(`[GoogleLogin] __googleLoginReceive failed: ${e}`));
         }
+      }
+
+      if (popupWindow && !popupWindow.isDestroyed()) {
+        setTimeout(async () => {
+          if (popupWindow.isDestroyed()) {
+            return;
+          }
+
+          try {
+            await Promise.race([
+              _event.sender.session.cookies.flushStore(),
+              new Promise((resolve) => setTimeout(resolve, 3000))
+            ]);
+          } catch (error) {
+            logger.info(`[GoogleLogin] Cookie flush after credential failed: ${error}`);
+          }
+
+          if (!popupWindow.isDestroyed()) {
+            popupWindow.close();
+          }
+        }, 1200);
       }
     });
   }
