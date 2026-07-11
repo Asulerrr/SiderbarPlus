@@ -16,20 +16,30 @@ test('panel switch attaches target content before publishing its metadata', asyn
   const switchStart = source.indexOf('private async switchPanel');
   const switchEnd = source.indexOf('private prepareView', switchStart);
   const switchSource = source.slice(switchStart, switchEnd);
-  const presentationCommit = switchSource.indexOf('commitPresentedPanel(descriptor.id, view)');
+  const presentationCommit = switchSource.indexOf(
+    'commitPresentedPanel(descriptor.id, view)'
+  );
   const chromeEmission = switchSource.indexOf('IPC_CHANNELS.chromeFadeIn');
-  const stateEmission = switchSource.indexOf('this.emitState(this.edge, this.panelMode)');
+  const stateEmission = switchSource.indexOf(
+    'this.emitState(this.edge, this.panelMode)'
+  );
 
   assert.ok(presentationCommit >= 0);
   assert.ok(chromeEmission > presentationCommit);
   assert.ok(stateEmission > presentationCommit);
-  assert.doesNotMatch(switchSource, /waitForViewReady|commitPresentedPanel\(descriptor\.id, null\)/);
+  assert.doesNotMatch(
+    switchSource,
+    /waitForViewReady|commitPresentedPanel\(descriptor\.id, null\)/
+  );
 });
 
 test('presentation commit uses the singular BrowserView slot and verifies it', async () => {
   const source = await readFile(join(testDir, '../PanelManager.ts'), 'utf8');
   const setActiveStart = source.indexOf('private setActiveView');
-  const setActiveEnd = source.indexOf('private updateViewBounds', setActiveStart);
+  const setActiveEnd = source.indexOf(
+    'private updateViewBounds',
+    setActiveStart
+  );
   const setActiveSource = source.slice(setActiveStart, setActiveEnd);
 
   assert.match(setActiveSource, /setBrowserView\(view\)/);
@@ -56,4 +66,49 @@ test('dock does not optimistically overwrite the authoritative active panel', as
     'utf8'
   );
   assert.doesNotMatch(source, /activePanelId:\s*id/);
+});
+
+test('interrupted transitions never reveal the stale real panel', async () => {
+  const source = await readFile(join(testDir, '../PanelManager.ts'), 'utf8');
+  const interruptedStart = source.indexOf(
+    "if (this.state === 'opening' || this.state === 'closing')"
+  );
+  const interruptedEnd = source.indexOf(
+    "this.state = 'opening'",
+    interruptedStart
+  );
+  const interruptedSource = source.slice(interruptedStart, interruptedEnd);
+
+  assert.ok(interruptedStart >= 0);
+  assert.match(interruptedSource, /this\.panelWindow\.hide\(\)/);
+  assert.match(interruptedSource, /this\.resetAnimationWindow\(\)/);
+  assert.doesNotMatch(interruptedSource, /this\.panelWindow\.show\(\)/);
+});
+
+test('opening prepares the hidden panel and paints it below the animation before handoff', async () => {
+  const source = await readFile(join(testDir, '../PanelManager.ts'), 'utf8');
+  const openingStart = source.indexOf("this.state = 'opening'");
+  const animationWait = source.indexOf(
+    'await sleep(OPEN_ANIMATION_MS)',
+    openingStart
+  );
+  const paintWait = source.indexOf(
+    'await sleep(OPEN_HANDOFF_PAINT_MS)',
+    animationWait
+  );
+  const handoffEnd = source.indexOf('this.cancelCloseTimer()', paintWait);
+  const beforeAnimation = source.slice(openingStart, animationWait);
+  const coveredPaint = source.slice(animationWait, paintWait);
+  const handoff = source.slice(paintWait, handoffEnd);
+
+  assert.ok(openingStart >= 0);
+  assert.match(beforeAnimation, /this\.panelWindow\.hide\(\)/);
+  assert.match(beforeAnimation, /this\.sendAnimateIn\(/);
+  assert.match(beforeAnimation, /this\.presentDescriptorView\(/);
+  assert.match(beforeAnimation, /this\.sendAnimationOpen\(/);
+  assert.doesNotMatch(beforeAnimation, /this\.panelWindow\.show\(\)/);
+  assert.match(coveredPaint, /this\.panelWindow\.show\(\)/);
+  assert.match(coveredPaint, /this\.coverPanelWithAnimation\(\)/);
+  assert.match(handoff, /this\.resetAnimationWindow\(\)/);
+  assert.match(handoff, /this\.revealPanelWindow\(\)/);
 });

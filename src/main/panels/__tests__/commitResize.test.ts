@@ -1,12 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { clampPanelWidth, getPanelWidthRange, getRightAnchoredViewX } from '../panelResize.ts';
+import { clampPanelWidth, getPanelWidthRange } from '../panelResize.ts';
 
 test('clamps width to 25% of work area (min 360px)', () => {
-  assert.equal(clampPanelWidth(100, 1920), 480);   // 25% of 1920 = 480
+  assert.equal(clampPanelWidth(100, 1920), 480); // 25% of 1920 = 480
   assert.equal(clampPanelWidth(0, 1920), 480);
   assert.equal(clampPanelWidth(-50, 1920), 480);
-  assert.equal(clampPanelWidth(100, 1280), 360);    // 25% of 1280 = 320 < 360 floor
+  assert.equal(clampPanelWidth(100, 1280), 360); // 25% of 1280 = 320 < 360 floor
 });
 
 test('clamps width to 80% of work area maximum', () => {
@@ -27,10 +27,4 @@ test('rounds fractional widths', () => {
 test('returns native resize limits with a valid min/max order', () => {
   assert.deepEqual(getPanelWidthRange(1920, 80), { min: 480, max: 1536 });
   assert.deepEqual(getPanelWidthRange(1280, 25), { min: 320, max: 320 });
-});
-
-test('right anchor is derived from absolute geometry, not prior resize events', () => {
-  assert.equal(getRightAnchoredViewX(509, 460), 49);
-  assert.equal(getRightAnchoredViewX(549, 460), 89);
-  assert.equal(getRightAnchoredViewX(549, 500), 49);
 });

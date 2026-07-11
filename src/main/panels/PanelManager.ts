@@ -1,8 +1,18 @@
 import { BrowserView, BrowserWindow, screen } from 'electron';
 import { BUILTIN_SETTINGS_ID } from '../../shared/constants';
 import { IPC_CHANNELS } from '../../shared/ipc-contracts';
-import { buildBuiltinPanelId, parseBuiltinPanelId } from '../../shared/builtinPanels';
-import type { AppConfig, AppearanceConfig, Edge, PanelDescriptor, PanelState, SiteInfo } from '../../shared/types';
+import {
+  buildBuiltinPanelId,
+  parseBuiltinPanelId
+} from '../../shared/builtinPanels';
+import type {
+  AppConfig,
+  AppearanceConfig,
+  Edge,
+  PanelDescriptor,
+  PanelState,
+  SiteInfo
+} from '../../shared/types';
 import { logger } from '../utils/logger';
 import type { ConfigStore } from '../store/ConfigStore';
 import type { PanelAnimationWindow } from '../windows/PanelAnimationWindow';
@@ -16,15 +26,14 @@ import { createBuiltinPanelDescriptor } from './builtinPanelDescriptor';
 export { clampPanelWidth } from './panelResize.ts';
 import {
   clampPanelWidth as _clampPanelWidth,
-  getPanelWidthRange,
-  getRightAnchoredViewX
+  getPanelWidthRange
 } from './panelResize.ts';
 
 const CHROME_HEIGHT = 76;
-const OPEN_ANIMATION_MS = 300;
+const OPEN_ANIMATION_MS = 340;
 const CLOSE_ANIMATION_MS = 280;
 const SNAPSHOT_PAINT_MS = 50;
-const PANEL_WINDOW_SHOW_SETTLE_MS = 180;
+const OPEN_HANDOFF_PAINT_MS = 64;
 const CLOSE_ANIMATION_DELAY_MS = 70;
 const CLOSE_HANDOFF_PAINT_MS = 50;
 const CONTENT_INSET = 8;
@@ -92,35 +101,36 @@ export class PanelManager {
     const browserWindow = panelWindow.getBrowserWindow();
     const animationBrowserWindow = animationWindow.getBrowserWindow();
     if (!browserWindow) {
-      throw new Error('Panel window must exist before PanelManager initialization.');
+      throw new Error(
+        'Panel window must exist before PanelManager initialization.'
+      );
     }
     if (!animationBrowserWindow) {
-      throw new Error('Panel animation window must exist before PanelManager initialization.');
+      throw new Error(
+        'Panel animation window must exist before PanelManager initialization.'
+      );
     }
 
     this.panelWindowRef = browserWindow;
     this.animationWindowRef = animationBrowserWindow;
-    this.panelWindowRef.setOpacity(0);
     this.panelWindowRef.setIgnoreMouseEvents(true, { forward: true });
     this.webPanelHost = new WebPanelHost({
       readConfig: () => this.configStore.read(),
       updateConfig: (patch) => this.configStore.update(patch),
       emitNavigation: (payload) =>
         this.emitNavigation(payload.panelId, payload.url, payload.canGoBack),
-      emitLoading: (payload) => this.emitLoading(payload.panelId, payload.isLoading)
+      emitLoading: (payload) =>
+        this.emitLoading(payload.panelId, payload.isLoading)
     });
 
-    this.panelWindowRef.on('will-resize', (event, newBounds, details) => {
+    this.panelWindowRef.on('will-resize', (event, _newBounds, details) => {
       const allowedEdge = this.edge === 'right' ? 'left' : 'right';
       if (this.state !== 'open' || details.edge !== allowedEdge) {
         event.preventDefault();
         return;
       }
       this.beginNativeResize();
-      this.panelWindow.updateResizeBackdrop(newBounds);
-      this.anchorViewBeforeNativeResize(newBounds);
     });
-    this.panelWindowRef.on('resize', () => this.layoutViewAfterNativeResize());
     this.panelWindowRef.on('resized', () => this.finishNativeResize());
   }
 
@@ -149,15 +159,11 @@ export class PanelManager {
     this.applyHoverConfig(config);
     this.startPointerTracking();
 
-    if (this.currentPanelId && this.currentPanelId !== panelId && this.state !== 'closed') {
-      if (this.state === 'closing' || this.state === 'opening') {
-        this.state = 'open';
-        this.raisePanelWindows();
-        this.panelWindowRef.setOpacity(1);
-        this.panelWindowRef.setIgnoreMouseEvents(false);
-        this.resetAnimationWindow();
-      }
-
+    if (
+      this.currentPanelId &&
+      this.currentPanelId !== panelId &&
+      this.state === 'open'
+    ) {
       ++this.lifecycleToken;
       this.currentPanelId = panelId;
       this.applyPanelBounds(descriptor, config);
@@ -171,32 +177,59 @@ export class PanelManager {
       return;
     }
 
+    if (this.state === 'opening' || this.state === 'closing') {
+      ++this.lifecycleToken;
+      ++this.switchToken;
+      this.panelWindow.hide();
+      this.resetAnimationWindow();
+    }
+
     this.state = 'opening';
     const token = ++this.lifecycleToken;
     this.currentPanelId = panelId;
     this.pendingDestroyId = null;
     this.applyPanelBounds(descriptor, config);
-    this.raisePanelWindows();
+    this.panelWindow.hide();
     this.panelWindowRef.setIgnoreMouseEvents(false);
 
-    this.sendAnimationOpen(descriptor, config.layout.edge, this.snapshots.get(panelId) ?? null, config.appearance);
+    this.sendAnimateIn(
+      descriptor,
+      config.layout.edge,
+      this.snapshots.get(panelId) ?? null,
+      config.appearance
+    );
+    this.presentDescriptorView(descriptor, config.layout.edge);
+    this.sendAnimationOpen(
+      descriptor,
+      config.layout.edge,
+      this.snapshots.get(panelId) ?? null,
+      config.appearance
+    );
 
     await sleep(OPEN_ANIMATION_MS);
-    if (token !== this.lifecycleToken || this.state !== 'opening' || this.currentPanelId !== panelId) {
+    if (
+      token !== this.lifecycleToken ||
+      this.state !== 'opening' ||
+      this.currentPanelId !== panelId
+    ) {
       return;
     }
 
-    this.sendAnimateIn(descriptor, config.layout.edge, this.snapshots.get(panelId) ?? null, config.appearance);
-    this.panelWindowRef.setOpacity(0);
-    this.presentDescriptorView(descriptor, config.layout.edge);
-    await sleep(PANEL_WINDOW_SHOW_SETTLE_MS);
-    if (token !== this.lifecycleToken || this.state !== 'opening' || this.currentPanelId !== panelId) {
+    // Keep the completed animation above the real HWND while DWM composites its
+    // first visible frames. Revealing both in the same tick exposes stale pixels.
+    this.panelWindow.show();
+    this.coverPanelWithAnimation();
+    await sleep(OPEN_HANDOFF_PAINT_MS);
+    if (
+      token !== this.lifecycleToken ||
+      this.state !== 'opening' ||
+      this.currentPanelId !== panelId
+    ) {
       return;
     }
 
-    this.panelWindowRef.setOpacity(1);
-    this.raisePanelWindows();
     this.resetAnimationWindow();
+    this.revealPanelWindow();
     this.cancelCloseTimer();
     this.state = 'open';
     this.emitState(config.layout.edge, this.panelMode);
@@ -230,7 +263,10 @@ export class PanelManager {
       if (this.panelMode === 'pinned') {
         return;
       }
-      if (this.currentPanelId === BUILTIN_SETTINGS_ID && this.state === 'open') {
+      if (
+        this.currentPanelId === BUILTIN_SETTINGS_ID &&
+        this.state === 'open'
+      ) {
         void this.hidePanel(true);
       }
     }, 50);
@@ -286,12 +322,18 @@ export class PanelManager {
     this.currentPanelId = closingPanelId;
     this.state = 'closing';
     const token = ++this.lifecycleToken;
-    this.pendingDestroyId = destroy ? this.presentedPanelId : this.pendingDestroyId;
+    this.pendingDestroyId = destroy
+      ? this.presentedPanelId
+      : this.pendingDestroyId;
     this.emitState(this.edge, this.panelMode, false);
 
     const config = await this.configStore.read();
     await this.webPanelHost.refreshConfig();
-    if (token !== this.lifecycleToken || this.state !== 'closing' || this.currentPanelId !== closingPanelId) {
+    if (
+      token !== this.lifecycleToken ||
+      this.state !== 'closing' ||
+      this.currentPanelId !== closingPanelId
+    ) {
       return;
     }
 
@@ -306,11 +348,17 @@ export class PanelManager {
       await sleep(SNAPSHOT_PAINT_MS);
     }
 
-    if (token !== this.lifecycleToken || this.state !== 'closing' || this.currentPanelId !== closingPanelId) {
+    if (
+      token !== this.lifecycleToken ||
+      this.state !== 'closing' ||
+      this.currentPanelId !== closingPanelId
+    ) {
       return;
     }
 
-    const descriptor = snapshotPanelId ? this.getDescriptor(config, snapshotPanelId) : null;
+    const descriptor = snapshotPanelId
+      ? this.getDescriptor(config, snapshotPanelId)
+      : null;
     if (descriptor) {
       this.sendAnimationClose(
         descriptor,
@@ -322,19 +370,30 @@ export class PanelManager {
     }
 
     await sleep(CLOSE_HANDOFF_PAINT_MS);
-    if (token !== this.lifecycleToken || this.state !== 'closing' || this.currentPanelId !== closingPanelId) {
+    if (
+      token !== this.lifecycleToken ||
+      this.state !== 'closing' ||
+      this.currentPanelId !== closingPanelId
+    ) {
       return;
     }
 
-    this.panelWindowRef.setOpacity(0);
-    this.webPanelHost.applyMuteState(currentView ? snapshotPanelId : null, !config.behavior.keepAudioOnHide);
+    this.panelWindow.hide();
+    this.webPanelHost.applyMuteState(
+      currentView ? snapshotPanelId : null,
+      !config.behavior.keepAudioOnHide
+    );
 
     if (currentView) {
       currentView.setBounds({ x: 0, y: 0, width: 0, height: 0 });
     }
 
     await sleep(CLOSE_ANIMATION_MS);
-    if (token !== this.lifecycleToken || this.state !== 'closing' || this.currentPanelId !== closingPanelId) {
+    if (
+      token !== this.lifecycleToken ||
+      this.state !== 'closing' ||
+      this.currentPanelId !== closingPanelId
+    ) {
       return;
     }
 
@@ -375,7 +434,9 @@ export class PanelManager {
     return this.presentedPanelId;
   }
 
-  async getMenuState(panelId: string): Promise<import('../../shared/types').PanelMenuState | null> {
+  async getMenuState(
+    panelId: string
+  ): Promise<import('../../shared/types').PanelMenuState | null> {
     return this.webPanelHost.getMenuState(panelId);
   }
 
@@ -431,7 +492,9 @@ export class PanelManager {
     await this.webPanelHost.goBack(panelId);
   }
 
-  async openMenu(anchor: import('../../shared/types').PanelMenuAnchor): Promise<void> {
+  async openMenu(
+    anchor: import('../../shared/types').PanelMenuAnchor
+  ): Promise<void> {
     const state = await this.webPanelHost.getMenuState(anchor.panelId);
     if (!state) {
       return;
@@ -495,7 +558,7 @@ export class PanelManager {
       }
     }
 
-    this.panelWindowRef.setOpacity(0);
+    this.panelWindow.hide();
     this.panelWindowRef.setIgnoreMouseEvents(true, { forward: true });
     this.hideAnimationWindow();
 
@@ -541,40 +604,10 @@ export class PanelManager {
   private beginNativeResize(): void {
     if (this.nativeResizeActive) return;
     this.nativeResizeActive = true;
-    this.panelWindow.beginResizeBackdrop();
     this.resizeReleaseGuardPoint = null;
     this.cancelCloseTimer();
     this.pointerOutsideSince = null;
     this.sendResizeState(true);
-  }
-
-  private getPresentedWebView(): BrowserView | null {
-    if (!this.presentedPanelId) return null;
-    const view = this.webPanelHost.getView(this.presentedPanelId);
-    return view && !view.webContents.isDestroyed() ? view : null;
-  }
-
-  private anchorViewBeforeNativeResize(targetWindowBounds: Electron.Rectangle): void {
-    if (this.edge !== 'right') return;
-    const view = this.getPresentedWebView();
-    if (!view) return;
-
-    const currentWindowWidth = this.panelWindowRef.getBounds().width;
-    const currentContentWidth = this.panelWindowRef.contentView.getBounds().width;
-    const frameWidth = Math.max(0, currentWindowWidth - currentContentWidth);
-    const targetContentWidth = Math.max(0, targetWindowBounds.width - frameWidth);
-    const viewBounds = view.getBounds();
-    const anchoredX = getRightAnchoredViewX(targetContentWidth, viewBounds.width);
-    if (viewBounds.x !== anchoredX) {
-      view.setBounds({ ...viewBounds, x: anchoredX });
-    }
-  }
-
-  private layoutViewAfterNativeResize(): void {
-    if (!this.nativeResizeActive) return;
-    this.panelWindow.updateResizeBackdrop(this.panelWindowRef.getBounds());
-    const view = this.getPresentedWebView();
-    if (view) this.updateViewBounds(view, this.edge);
   }
 
   private finishNativeResize(): void {
@@ -584,20 +617,27 @@ export class PanelManager {
     this.panelWindow.rememberNativeWidth(this.edge, width);
     const releasePoint = screen.getCursorScreenPoint();
     this.sendResizeState(false);
-    this.panelWindow.finishResizeBackdrop();
     void this.commitResize(width, releasePoint).catch((error) => {
       logger.error('Failed to persist panel resize', error);
     });
   }
 
-  private async commitResize(newWidth: number, releasePoint: Electron.Point): Promise<void> {
+  private async commitResize(
+    newWidth: number,
+    releasePoint: Electron.Point
+  ): Promise<void> {
     this.cancelCloseTimer();
     this.pointerOutsideSince = null;
     const display = getTargetDisplay(this.displayId);
-    const width = _clampPanelWidth(newWidth, display.workArea.width, this.panelMaxWidthPercent);
+    const width = _clampPanelWidth(
+      newWidth,
+      display.workArea.width,
+      this.panelMaxWidthPercent
+    );
 
     const currentBoundsWidth = this.panelWindowRef.getBounds().width;
-    const currentContentWidth = this.panelWindowRef.contentView.getBounds().width;
+    const currentContentWidth =
+      this.panelWindowRef.contentView.getBounds().width;
     const adjustedAfterResize = currentBoundsWidth !== width;
     const contentWidthOverride = adjustedAfterResize
       ? Math.max(0, width - (currentBoundsWidth - currentContentWidth))
@@ -619,7 +659,9 @@ export class PanelManager {
 
     if (this.panelMode === 'hover') {
       this.sticky = false;
-      this.resizeReleaseGuardPoint = this.isCursorInsideInteractiveArea(releasePoint)
+      this.resizeReleaseGuardPoint = this.isCursorInsideInteractiveArea(
+        releasePoint
+      )
         ? null
         : releasePoint;
     } else {
@@ -633,7 +675,9 @@ export class PanelManager {
     // 否则 applyPanelBounds 永远读取 descriptor.preferredWidth 初值，panelDefaultWidth 不起作用。
     // builtin descriptor（add-site / edit-site / site-info）不持久化 preferredWidth。
     const config = await this.configStore.read();
-    const builtinRoute = resizedPanelId ? parseBuiltinPanelId(resizedPanelId) : null;
+    const builtinRoute = resizedPanelId
+      ? parseBuiltinPanelId(resizedPanelId)
+      : null;
     const isBuiltin = builtinRoute !== null;
     const matchesUserPanel =
       !isBuiltin &&
@@ -650,7 +694,11 @@ export class PanelManager {
     }
   }
 
-  private async switchPanel(descriptor: PanelDescriptor, edge: Edge, appearance?: AppearanceConfig): Promise<void> {
+  private async switchPanel(
+    descriptor: PanelDescriptor,
+    edge: Edge,
+    appearance?: AppearanceConfig
+  ): Promise<void> {
     const token = ++this.switchToken;
     this.pendingDestroyId = null;
     if (this.panelMode === 'hover') {
@@ -665,7 +713,9 @@ export class PanelManager {
     }
 
     const view = this.prepareView(descriptor, edge);
-    const isLoading = descriptor.type === 'web' && this.webPanelHost.isViewLoading(descriptor.id);
+    const isLoading =
+      descriptor.type === 'web' &&
+      this.webPanelHost.isViewLoading(descriptor.id);
     if (!this.commitPresentedPanel(descriptor.id, view)) return;
 
     if (descriptor.type === 'web') {
@@ -689,7 +739,10 @@ export class PanelManager {
     }
   }
 
-  private prepareView(descriptor: PanelDescriptor, edge: Edge): BrowserView | null {
+  private prepareView(
+    descriptor: PanelDescriptor,
+    edge: Edge
+  ): BrowserView | null {
     if (descriptor.type !== 'web') {
       return null;
     }
@@ -705,32 +758,53 @@ export class PanelManager {
     this.edge = config.layout.edge;
     // Use cursor position to detect which screen the user is interacting with.
     // config.layout.displayId may be unset — defaults to primary.
-    this.displayId = config.layout.displayId ??
+    this.displayId =
+      config.layout.displayId ??
       screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).id;
     this.hoverCloseDelayMs = config.behavior.hoverCloseDelayMs;
     const raw = config.layout.panelDefaultWidth;
     this.panelMaxWidthPercent = raw >= 25 && raw <= 100 ? raw : 50;
     const display = getTargetDisplay(this.displayId);
-    this.panelWindow.setResizeLimits(display.workArea.width, this.panelMaxWidthPercent);
+    this.panelWindow.setResizeLimits(
+      display.workArea.width,
+      this.panelMaxWidthPercent
+    );
   }
 
-  private applyPanelBounds(descriptor: PanelDescriptor, config: AppConfig): void {
+  private applyPanelBounds(
+    descriptor: PanelDescriptor,
+    config: AppConfig
+  ): void {
     const display = getTargetDisplay(config.layout.displayId);
     const workAreaWidth = display.workArea.width;
-    const maxPercent = config.layout.panelDefaultWidth >= 25 && config.layout.panelDefaultWidth <= 100
-      ? config.layout.panelDefaultWidth
-      : 50;
+    const maxPercent =
+      config.layout.panelDefaultWidth >= 25 &&
+      config.layout.panelDefaultWidth <= 100
+        ? config.layout.panelDefaultWidth
+        : 50;
     const { min: minWidthPx } = getPanelWidthRange(workAreaWidth, maxPercent);
     const preferredWidth = getPreferredPanelWidth(
       descriptor.preferredWidth,
       minWidthPx,
       workAreaWidth
     );
-    const panelWidth = _clampPanelWidth(preferredWidth, workAreaWidth, maxPercent);
+    const panelWidth = _clampPanelWidth(
+      preferredWidth,
+      workAreaWidth,
+      maxPercent
+    );
 
     this.panelWindow.setResizeLimits(workAreaWidth, maxPercent);
-    this.panelWindow.updateBounds(config.layout.edge, panelWidth, config.layout.displayId);
-    this.animationWindow.updateBounds(config.layout.edge, panelWidth, config.layout.displayId);
+    this.panelWindow.updateBounds(
+      config.layout.edge,
+      panelWidth,
+      config.layout.displayId
+    );
+    this.animationWindow.updateBounds(
+      config.layout.edge,
+      panelWidth,
+      config.layout.displayId
+    );
   }
 
   private startPointerTracking(): void {
@@ -759,7 +833,12 @@ export class PanelManager {
       return;
     }
 
-    if (this.nativeResizeActive || this.sticky || this.panelMode === 'pinned' || this.isHideMuted()) {
+    if (
+      this.nativeResizeActive ||
+      this.sticky ||
+      this.panelMode === 'pinned' ||
+      this.isHideMuted()
+    ) {
       this.pointerOutsideSince = null;
       return;
     }
@@ -814,7 +893,7 @@ export class PanelManager {
         view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
       }
     }
-    this.panelWindowRef.setOpacity(0);
+    this.panelWindow.hide();
     this.panelWindowRef.setIgnoreMouseEvents(true, { forward: true });
     this.hideAnimationWindow();
     this.stopPointerTracking();
@@ -827,12 +906,16 @@ export class PanelManager {
     this.emitState(this.edge, this.panelMode);
   }
 
-  private isCursorInsideInteractiveArea(cursor = screen.getCursorScreenPoint()): boolean {
+  private isCursorInsideInteractiveArea(
+    cursor = screen.getCursorScreenPoint()
+  ): boolean {
     const panelBounds = this.panelWindowRef.getBounds();
     const dockBounds = getDockBounds(this.edge, this.displayId);
     const menuBrowserWindow = this.menuWindow.getBrowserWindow();
     const menuBounds =
-      menuBrowserWindow && menuBrowserWindow.isVisible() ? menuBrowserWindow.getBounds() : null;
+      menuBrowserWindow && menuBrowserWindow.isVisible()
+        ? menuBrowserWindow.getBounds()
+        : null;
 
     return (
       this.isPointInsideBounds(cursor, panelBounds) ||
@@ -843,7 +926,9 @@ export class PanelManager {
 
   private isPointInsideBounds(
     point: Electron.Point,
-    bounds: Electron.Rectangle | { x: number; y: number; width: number; height: number }
+    bounds:
+      | Electron.Rectangle
+      | { x: number; y: number; width: number; height: number }
   ): boolean {
     return (
       point.x >= bounds.x - POINTER_TRACK_MARGIN &&
@@ -866,9 +951,16 @@ export class PanelManager {
     this.commitPresentedPanel(descriptor.id, view);
   }
 
-  private commitPresentedPanel(panelId: string, view: BrowserView | null): boolean {
+  private commitPresentedPanel(
+    panelId: string,
+    view: BrowserView | null
+  ): boolean {
     if (this.currentPanelId !== panelId) return false;
-    if (view && (view.webContents.isDestroyed() || this.webPanelHost.getView(panelId) !== view)) {
+    if (
+      view &&
+      (view.webContents.isDestroyed() ||
+        this.webPanelHost.getView(panelId) !== view)
+    ) {
       return false;
     }
     if (!this.setActiveView(view)) return false;
@@ -902,21 +994,32 @@ export class PanelManager {
     edge: Edge,
     overrideContentWidth?: number
   ): void {
-    const { width: rawWidth, height } = this.panelWindowRef.contentView.getBounds();
-    const width = overrideContentWidth != null ? overrideContentWidth : rawWidth;
+    const { width: rawWidth, height } =
+      this.panelWindowRef.contentView.getBounds();
+    const width =
+      overrideContentWidth != null ? overrideContentWidth : rawWidth;
     const sideInsetLeft = edge === 'right' ? CONTENT_INSET : 0;
     const sideInsetRight = edge === 'left' ? CONTENT_INSET : 0;
     const dockSideBorderWidth = 0;
     const outerSideBorderWidth = PANEL_BORDER_WIDTH;
-    const leftBorderWidth = edge === 'right' ? outerSideBorderWidth : dockSideBorderWidth;
-    const rightBorderWidth = edge === 'left' ? outerSideBorderWidth : dockSideBorderWidth;
+    const leftBorderWidth =
+      edge === 'right' ? outerSideBorderWidth : dockSideBorderWidth;
+    const rightBorderWidth =
+      edge === 'left' ? outerSideBorderWidth : dockSideBorderWidth;
     const innerWidth = width - sideInsetLeft - sideInsetRight;
 
     view.setBounds({
       x: sideInsetLeft + leftBorderWidth,
       y: PANEL_TOP_INSET + CHROME_HEIGHT,
       width: Math.max(0, innerWidth - leftBorderWidth - rightBorderWidth),
-      height: Math.max(0, height - PANEL_TOP_INSET - CHROME_HEIGHT - CONTENT_INSET - PANEL_BORDER_WIDTH)
+      height: Math.max(
+        0,
+        height -
+          PANEL_TOP_INSET -
+          CHROME_HEIGHT -
+          CONTENT_INSET -
+          PANEL_BORDER_WIDTH
+      )
     });
   }
 
@@ -933,7 +1036,12 @@ export class PanelManager {
     });
   }
 
-  private sendAnimateIn(descriptor: PanelDescriptor, edge: Edge, snapshotDataUrl: string | null, appearance?: AppearanceConfig): void {
+  private sendAnimateIn(
+    descriptor: PanelDescriptor,
+    edge: Edge,
+    snapshotDataUrl: string | null,
+    appearance?: AppearanceConfig
+  ): void {
     this.panelWindowRef.webContents.send(IPC_CHANNELS.panelAnimateIn, {
       panelId: descriptor.id,
       descriptor,
@@ -944,10 +1052,13 @@ export class PanelManager {
     });
   }
 
-  private sendAnimationOpen(descriptor: PanelDescriptor, edge: Edge, snapshotDataUrl: string | null, appearance?: AppearanceConfig): void {
-    this.animationWindowRef.setAlwaysOnTop(true, 'screen-saver');
-    this.animationWindowRef.moveTop();
-    this.dockWindowRef.moveTop();
+  private sendAnimationOpen(
+    descriptor: PanelDescriptor,
+    edge: Edge,
+    snapshotDataUrl: string | null,
+    appearance?: AppearanceConfig
+  ): void {
+    this.coverPanelWithAnimation();
     this.animationWindowRef.webContents.send(IPC_CHANNELS.panelAnimationOpen, {
       panelId: descriptor.id,
       descriptor,
@@ -984,16 +1095,21 @@ export class PanelManager {
     this.animationWindow.hide();
   }
 
-  private raisePanelWindows(): void {
+  private coverPanelWithAnimation(): void {
     this.animationWindowRef.setAlwaysOnTop(true, 'screen-saver');
-    this.panelWindowRef.setAlwaysOnTop(true, 'screen-saver');
     this.animationWindowRef.moveTop();
-    this.panelWindowRef.moveTop();
-    // 把 dock 抬回最上层——panel/animation 动画不应遮盖 dock
     this.dockWindowRef.moveTop();
   }
 
-  private async captureViewSnapshot(view: BrowserView | null): Promise<string | null> {
+  private revealPanelWindow(): void {
+    this.panelWindowRef.setAlwaysOnTop(true, 'screen-saver');
+    this.panelWindowRef.moveTop();
+    this.dockWindowRef.moveTop();
+  }
+
+  private async captureViewSnapshot(
+    view: BrowserView | null
+  ): Promise<string | null> {
     if (!view || view.webContents.isDestroyed()) {
       return null;
     }
@@ -1028,15 +1144,25 @@ export class PanelManager {
 
   private sendResizeState(active: boolean): void {
     if (!this.panelWindowRef.isDestroyed()) {
-      this.panelWindowRef.webContents.send(IPC_CHANNELS.panelResizeState, active);
+      this.panelWindowRef.webContents.send(
+        IPC_CHANNELS.panelResizeState,
+        active
+      );
     }
   }
 
-  private emitNavigation(panelId: string, url: string, canGoBack?: boolean): void {
+  private emitNavigation(
+    panelId: string,
+    url: string,
+    canGoBack?: boolean
+  ): void {
     this.panelWindowRef.webContents.send(IPC_CHANNELS.panelNavigationState, {
       panelId,
       url,
-      canGoBack: canGoBack ?? this.webPanelHost.getView(panelId)?.webContents.canGoBack() ?? false
+      canGoBack:
+        canGoBack ??
+        this.webPanelHost.getView(panelId)?.webContents.canGoBack() ??
+        false
     });
   }
 
@@ -1048,9 +1174,15 @@ export class PanelManager {
     });
   }
 
-  private getDescriptor(config: AppConfig, panelId: string): PanelDescriptor | null {
+  private getDescriptor(
+    config: AppConfig,
+    panelId: string
+  ): PanelDescriptor | null {
     return (
-      createBuiltinPanelDescriptor(panelId, this.builtinPreferredWidths.get(panelId)) ??
+      createBuiltinPanelDescriptor(
+        panelId,
+        this.builtinPreferredWidths.get(panelId)
+      ) ??
       config.panels.find((panel) => panel.id === panelId) ??
       null
     );
@@ -1068,13 +1200,9 @@ export class PanelManager {
   }
 
   private cancelActiveResize(): void {
-    if (!this.nativeResizeActive) {
-      this.panelWindow.cancelResizeBackdrop();
-      return;
-    }
+    if (!this.nativeResizeActive) return;
     this.nativeResizeActive = false;
     this.sendResizeState(false);
-    this.panelWindow.cancelResizeBackdrop();
   }
 
   private getDescriptorUrl(descriptor: PanelDescriptor): string {
