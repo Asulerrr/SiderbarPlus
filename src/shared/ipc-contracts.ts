@@ -17,6 +17,7 @@ import type {
   PanelLoadingPayload,
   PanelNavigationPayload,
   PanelOpenExternalPayload,
+  PanelResizeStartPayload,
   PanelsUpdatedPayload,
   PanelSnapshotPayload,
   PanelState,
@@ -80,13 +81,14 @@ export const IPC_CHANNELS = {
   panelLoadingState: 'panel:loading-state',
   panelCopyToast: 'panel:copy-toast',
   panelTogglePin: 'panel:toggle-pin',
-  panelCommitResize: 'panel:commit-resize',
-  panelResizeDrag: 'panel:resize-drag',
+  panelResizeStart: 'panel:resize-start',
+  panelResizeState: 'panel:resize-state',
   settingsOpenConfigFolder: 'settings:open-config-folder',
   settingsExportConfig: 'settings:export-config',
   settingsImportConfig: 'settings:import-config',
   settingsClearStorageData: 'settings:clear-storage-data',
   settingsCheckUpdate: 'settings:check-update',
+  settingsAppVersion: 'settings:app-version',
   settingsQuitApp: 'settings:quit-app',
   configListSessionGroups: 'config:list-session-groups'
 } as const;
@@ -146,13 +148,14 @@ export interface PanelAPI {
   onPanelState: (callback: (state: PanelState) => void) => () => void;
   onConfigChanged: (callback: (config: AppConfig) => void) => () => void;
   togglePin: () => Promise<IpcResult<void>>;
-  commitResize: (width: number) => Promise<IpcResult<void>>;
-  resizeDrag: (width: number) => void;
+  startResize: (point: PanelResizeStartPayload) => void;
+  onResizeState: (callback: (active: boolean) => void) => () => void;
   openConfigFolder: () => Promise<IpcResult<void>>;
   exportConfig: () => Promise<IpcResult<{ canceled: boolean; path?: string }>>;
   importConfig: () => Promise<IpcResult<{ canceled: boolean; restartRequired: boolean }>>;
   clearStorageData: () => Promise<IpcResult<void>>;
   checkUpdate: () => Promise<IpcResult<UpdateCheckResult>>;
+  getAppVersion: () => Promise<IpcResult<string>>;
   quitApp: () => Promise<IpcResult<void>>;
   listSessionGroups: () => Promise<IpcResult<string[]>>;
 }

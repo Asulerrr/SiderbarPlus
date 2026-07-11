@@ -6,6 +6,7 @@ import type { ConfigStore } from '../store/ConfigStore';
 import type { AutoLaunchService } from '../services/AutoLaunchService';
 import type { FullscreenWatcher } from '../services/FullscreenWatcher';
 import type { WindowManager } from '../windows/WindowManager';
+import { didDockPlacementChange } from '../utils/dockPlacement';
 
 export const registerConfigHandlers = (
   configStore: ConfigStore,
@@ -43,12 +44,8 @@ export const registerConfigHandlers = (
         if (before.app.autoLaunch !== config.app.autoLaunch) {
           await autoLaunchService.sync(config.app.autoLaunch);
         }
-        // layout.edge 变化时强制收起 panel + 重定位窗口（PRD §5.8）
-        if (before.layout.edge !== config.layout.edge) {
-          windowManager.applyEdgeChange(config);
-        }
-        // displayId 变化时重定位窗口到目标显示器
-        if (before.layout.displayId !== config.layout.displayId) {
+        // edge 与 displayId 可能在同一个 patch 中变化，必须作为一次原子重定位处理。
+        if (didDockPlacementChange(before.layout, config.layout)) {
           windowManager.applyEdgeChange(config);
         }
         // hideOnFullscreen 变化时启停 watcher（PRD §5.9.4）
@@ -62,10 +59,12 @@ export const registerConfigHandlers = (
         // 外观变更（主题模式 / dock 底板透明度）→ 同步 dock 窗口透明状态
         if (
           before.appearance.themeMode !== config.appearance.themeMode ||
-          before.appearance.dockOpacity !== config.appearance.dockOpacity
+          before.appearance.dockOpacity !== config.appearance.dockOpacity ||
+          before.appearance.customColor !== config.appearance.customColor
         ) {
           const dockWindow = windowManager.getDockWindow();
           dockWindow?.updateConfig(config);
+          windowManager.getPanelWindow()?.updateConfig(config);
         }
         for (const win of BrowserWindow.getAllWindows()) {
           win.webContents.send(IPC_CHANNELS.configChanged, config);

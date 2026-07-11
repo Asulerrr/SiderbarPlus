@@ -1,10 +1,11 @@
 {
   "name": "sidebar",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "SideBar desktop sidebar for Windows.",
   "main": "./out/main/index.js",
   "author": "Codex",
   "license": "MIT",
+  "repository": "https://github.com/Asulerrr/SiderbarPlus.git",
   "scripts": {
     "dev": "set \"ELECTRON_RUN_AS_NODE=\" && electron-vite dev",
     "build": "tsc --noEmit && electron-vite build",

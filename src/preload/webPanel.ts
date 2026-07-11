@@ -5,26 +5,6 @@ import { IPC_CHANNELS } from '../shared/ipc-contracts';
 // as mouse moves over website content with varying cursor styles.
 webFrame.insertCSS('*,*::before,*::after,a,button,input,textarea,select,[role=button],[onclick]{cursor:default!important}');
 
-// --- Google login GIS credential relay ---
-// With contextIsolation: false the main process can call this function
-// via executeJavaScript. We dispatch a real MessageEvent on the window
-// so ALL registered 'message' listeners receive it — no need to capture
-// individual handlers (which is fragile if the page registers multiple
-// listeners or if GIS initialises late).
-(window as any).__googleLoginReceive = (data: unknown): void => {
-  try {
-    const event = new MessageEvent('message', {
-      data,
-      origin: 'https://accounts.google.com',
-      source: window
-    });
-    window.dispatchEvent(event);
-  } catch (e) {
-    console.error('[webPanel] GIS dispatch failed:', e);
-  }
-};
-// --- end Google login relay ---
-
 let lastCancelAt = 0;
 
 const cancelHide = (): void => {

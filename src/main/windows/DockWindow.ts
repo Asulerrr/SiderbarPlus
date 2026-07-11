@@ -8,6 +8,9 @@ import { getDockBounds } from '../utils/display';
 export class DockWindow {
   private window: BrowserWindow | null = null;
   private visible = false;
+  private ready = false;
+  private geometryGeneration = 0;
+  private activeGeometryGeneration: number | null = null;
 
   constructor(private config: AppConfig) {}
 
@@ -46,14 +49,15 @@ export class DockWindow {
     this.window.setAlwaysOnTop(true, 'floating');
     this.window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
 
-    // ready-to-show 可能在 AppBar 注册（收缩 work area）之后才触发。
-    // showInactive 时 Windows 可能校验窗口是否在 work area 内并 snap 回去，
-    // 因此显示后强制 setBounds 把 dock 钉回屏边。
     this.window.once('ready-to-show', () => {
+      this.ready = true;
       this.window?.showInactive();
-      this.window?.setIgnoreMouseEvents(!this.visible);
-      this.window?.setOpacity(this.visible ? 1 : 0);
-      this.assertPosition();
+      if (this.activeGeometryGeneration !== null || !this.visible) {
+        this.window?.setIgnoreMouseEvents(true);
+        this.window?.setOpacity(0);
+        return;
+      }
+      this.present(false);
     });
 
     if (process.env.ELECTRON_RENDERER_URL) {
@@ -74,12 +78,8 @@ export class DockWindow {
   show(): void {
     if (!this.window) return;
     this.visible = true;
-    this.window.setAlwaysOnTop(true, 'floating');
-    this.window.setIgnoreMouseEvents(false);
-    this.window.moveTop();
-    this.assertPosition();
-    this.window.setOpacity(1);
-    this.window.webContents.send(IPC_CHANNELS.dockWillShow);
+    if (this.activeGeometryGeneration !== null) return;
+    this.present(true);
   }
 
   hide(): void {
@@ -98,23 +98,36 @@ export class DockWindow {
     this.window.setBounds(getDockBounds(edge, displayId));
   }
 
-  /** opacity=0 → 重定位（OS 动画在透明期间完成）→ opacity=1 + CSS 滑入 */
-  reposition(edge: AppConfig['layout']['edge'], displayId?: number): void {
-    if (!this.window) return;
-    // 1. 透明隐藏（不用 BrowserWindow.hide()，避免 SW_HIDE 导致 showInactive 后状态异常）
+  isAtBounds(edge: AppConfig['layout']['edge'], displayId?: number): boolean {
+    if (!this.window || this.window.isDestroyed()) return false;
+    const current = this.window.getBounds();
+    const expected = getDockBounds(edge, displayId);
+    return (
+      current.x === expected.x &&
+      current.y === expected.y &&
+      current.width === expected.width &&
+      current.height === expected.height
+    );
+  }
+
+  beginGeometryTransition(): number {
+    const generation = ++this.geometryGeneration;
+    this.activeGeometryGeneration = generation;
+    if (!this.window || this.window.isDestroyed()) return generation;
     this.window.setOpacity(0);
     this.window.setIgnoreMouseEvents(true);
-    // 2. 重定位——OS 可能动画窗口位移，但 opacity=0 看不见
-    this.window.setBounds(getDockBounds(edge, displayId));
-    // 3. 延迟显示：等 OS 位移动画完成（Windows DWM ~150ms）
-    setTimeout(() => {
-      if (!this.window || this.window.isDestroyed()) return;
-      this.visible = true;
-      this.window.setAlwaysOnTop(true, 'floating');
-      this.window.setIgnoreMouseEvents(false);
-      this.window.setOpacity(1);
-      this.window.webContents.send(IPC_CHANNELS.dockWillShow);
-    }, 200);
+    this.window.setAlwaysOnTop(false);
+    return generation;
+  }
+
+  finishGeometryTransition(generation: number): boolean {
+    if (generation !== this.activeGeometryGeneration) return false;
+    this.activeGeometryGeneration = null;
+    this.assertPosition();
+    if (this.visible) {
+      this.present(false);
+    }
+    return true;
   }
 
   /** 强制把 dock 窗口钉回屏边（work area 收缩后 Windows 可能把它 snap 进去） */
@@ -122,5 +135,19 @@ export class DockWindow {
     if (!this.window || this.window.isDestroyed()) return;
     const bounds = getDockBounds(this.config.layout.edge, this.config.layout.displayId);
     this.window.setBounds(bounds);
+  }
+
+  private present(animate: boolean): void {
+    if (!this.window || this.window.isDestroyed() || !this.ready) return;
+    this.window.setAlwaysOnTop(true, 'floating');
+    // Restoring TOPMOST can make Shell constrain the window to the work area.
+    // The last geometry write must therefore happen after the style change.
+    this.assertPosition();
+    this.window.setIgnoreMouseEvents(false);
+    this.window.moveTop();
+    this.window.setOpacity(1);
+    if (animate) {
+      this.window.webContents.send(IPC_CHANNELS.dockWillShow);
+    }
   }
 }

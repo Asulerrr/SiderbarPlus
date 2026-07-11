@@ -1,9 +1,8 @@
 import type { AppConfig } from './types';
-import { DEFAULT_ICONS } from './defaultIcons';
+import { DEFAULT_ICONS } from './defaultIcons.ts';
 
 export const APP_ID = 'com.sidebar.app';
 export const APP_NAME = 'SideBar';
-export const APP_VERSION = '1.0.0';
 export const DOCK_WIDTH = 44;
 export const PANEL_DEFAULT_WIDTH = 50; // 屏幕宽度的百分比（30-100）
 export const DOCK_BACKGROUND = '#323232';
@@ -13,7 +12,7 @@ export const BUILTIN_SETTINGS_ID = 'builtin:settings';
 export const BUILTIN_EDIT_SITE_PREFIX = 'builtin:edit-site:';
 export const BUILTIN_SITE_INFO_PREFIX = 'builtin:site-info:';
 
-const DEV_TEST_PANELS = [
+const DEFAULT_PANELS = [
   {
     id: 'dev-bilibili',
     title: '哔哩哔哩',
@@ -51,8 +50,8 @@ const DEV_TEST_PANELS = [
   }
 ] as const;
 
-const buildDevTestPanels = () =>
-  DEV_TEST_PANELS.map((panel, index) => ({
+const buildDefaultPanels = () =>
+  DEFAULT_PANELS.map((panel, order) => ({
     id: panel.id,
     type: 'web' as const,
     title: panel.title,
@@ -62,15 +61,15 @@ const buildDevTestPanels = () =>
       fallbackLetter: panel.fallbackLetter,
       fallbackColor: panel.fallbackColor
     },
-    order: index,
+    order,
+    preferredWidth: PANEL_DEFAULT_WIDTH,
     web: {
       url: panel.url,
       openInBrowser: 'system',
       zoomFactor: 1,
       userAgentMode: 'desktop' as const,
       notificationsSnoozed: false,
-      isolatedSession: false,
-      sessionGroup: undefined
+      isolatedSession: false
     }
   }));
 
@@ -98,7 +97,7 @@ export const DEFAULT_CONFIG = (): AppConfig => {
       customColor: '#1B1B1BFF',
       dockOpacity: DOCK_DEFAULT_OPACITY
     },
-    panels: buildDevTestPanels(),
+    panels: buildDefaultPanels(),
     meta: {
       createdAt: now,
       lastUpdatedAt: now

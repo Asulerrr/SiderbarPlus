@@ -151,6 +151,11 @@ export interface PanelActionPayload {
   panelId: string;
 }
 
+export interface PanelResizeStartPayload {
+  x: number;
+  y: number;
+}
+
 export interface PanelOpenExternalPayload extends PanelActionPayload {
   url?: string;
 }
@@ -193,9 +198,9 @@ export interface FaviconFetchPayload {
 
 export interface FaviconFetchResult {
   url: string;
-  iconPath: string;
+  iconPath?: string;
   dataUrl: string;
-  source: 'cache' | 'html' | 'favicon' | 'google' | 'letter';
+  source: 'cache' | 'html' | 'favicon' | 'letter';
   fallbackLetter: string;
   fallbackColor: string;
 }

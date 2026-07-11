@@ -22,14 +22,9 @@ export default function App(): JSX.Element {
   });
   const [highlightedPanelId, setHighlightedPanelId] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
-  const [entering, setEntering] = useState(true);
+  const [entering, setEntering] = useState(false);
   const hoverTimerRef = useRef<number | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => setEntering(false));
-    return () => cancelAnimationFrame(frame);
-  }, []);
 
   useEffect(() => {
     const dispose = window.dockAPI.onWillShow(() => {
@@ -115,17 +110,14 @@ export default function App(): JSX.Element {
 
     hoverTimerRef.current = window.setTimeout(() => {
       void window.dockAPI.hoverPanel(id);
-    }, 200);
+    }, config.behavior.hoverOpenDelayMs);
   };
 
   const handleActivatePanel = async (id: string): Promise<void> => {
     if (hoverTimerRef.current) {
       window.clearTimeout(hoverTimerRef.current);
     }
-    const result = await window.dockAPI.showPanel(id);
-    if (result.ok) {
-      setPanelState((current) => ({ ...current, activePanelId: id }));
-    }
+    await window.dockAPI.showPanel(id);
   };
 
   const handleHideDock = async (): Promise<void> => {

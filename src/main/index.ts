@@ -1,4 +1,4 @@
-import { app, BrowserWindow, globalShortcut, session } from 'electron';
+import { app, BrowserWindow, globalShortcut } from 'electron';
 
 app.commandLine.appendSwitch('disable-features', 'UserAgentClientHint,UserAgentClientHints,FedCm,FedCmWithoutWellKnownEnforcement,FedCmIdpSigninStatus,FedCmButtonMode,FedCmMultipleIdentityProviders');
 
@@ -133,7 +133,7 @@ app.on('before-quit', (event) => {
   event.preventDefault();
   Promise.all([
     configStoreRef?.waitForPendingWrites() ?? Promise.resolve(),
-    session.fromPartition('persist:shared', { cache: true }).cookies.flushStore()
+    windowManager?.flushWebPanelCookies() ?? Promise.resolve()
   ])
     .then(() => {
       // ABM_REMOVE 发送 WM_SETTINGCHANGE 给所有顶层窗口，其他应用需要时间

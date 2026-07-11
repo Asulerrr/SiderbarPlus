@@ -94,15 +94,18 @@ const panelAPI: PanelAPI = {
     return () => ipcRenderer.removeListener(IPC_CHANNELS.configChanged, listener);
   },
   togglePin: () => ipcRenderer.invoke(IPC_CHANNELS.panelTogglePin),
-  commitResize: (width) => ipcRenderer.invoke(IPC_CHANNELS.panelCommitResize, width),
-  resizeDrag: (width) => {
-    ipcRenderer.send(IPC_CHANNELS.panelResizeDrag, width);
+  startResize: (point) => ipcRenderer.send(IPC_CHANNELS.panelResizeStart, point),
+  onResizeState: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, active: boolean) => callback(active);
+    ipcRenderer.on(IPC_CHANNELS.panelResizeState, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.panelResizeState, listener);
   },
   openConfigFolder: () => ipcRenderer.invoke(IPC_CHANNELS.settingsOpenConfigFolder),
   exportConfig: () => ipcRenderer.invoke(IPC_CHANNELS.settingsExportConfig),
   importConfig: () => ipcRenderer.invoke(IPC_CHANNELS.settingsImportConfig),
   clearStorageData: () => ipcRenderer.invoke(IPC_CHANNELS.settingsClearStorageData),
   checkUpdate: () => ipcRenderer.invoke(IPC_CHANNELS.settingsCheckUpdate),
+  getAppVersion: () => ipcRenderer.invoke(IPC_CHANNELS.settingsAppVersion),
   quitApp: () => ipcRenderer.invoke(IPC_CHANNELS.settingsQuitApp),
   listSessionGroups: () => ipcRenderer.invoke(IPC_CHANNELS.configListSessionGroups)
 };

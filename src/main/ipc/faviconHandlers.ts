@@ -3,9 +3,7 @@ import type { FaviconFetchPayload, FaviconFetchResult, IpcResult } from '../../s
 import { FaviconService } from '../services/FaviconService';
 import { handleIpc } from './handleIpc';
 
-export const registerFaviconHandlers = (): void => {
-  const faviconService = new FaviconService();
-
+export const registerFaviconHandlers = (faviconService: FaviconService): void => {
   handleIpc(
     IPC_CHANNELS.faviconFetch,
     async (_event, payload: FaviconFetchPayload): Promise<IpcResult<FaviconFetchResult>> => {

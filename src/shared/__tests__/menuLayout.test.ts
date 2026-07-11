@@ -13,7 +13,7 @@ test('panel menu window is tall enough for all visible actions', () => {
     separatorCount: PANEL_MENU_SEPARATOR_COUNT
   });
 
-  assert.equal(PANEL_MENU_ITEM_COUNT, 7);
+  assert.equal(PANEL_MENU_ITEM_COUNT, 8);
   assert.equal(PANEL_MENU_SEPARATOR_COUNT, 1);
-  assert.equal(size.height, 243);
+  assert.equal(size.height, 275);
 });

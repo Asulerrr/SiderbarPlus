@@ -10,18 +10,21 @@ import type {
   PanelMenuActionPayload,
   PanelMenuState,
   PanelOpenExternalPayload,
+  PanelResizeStartPayload,
   PanelUpdatePayload,
   SiteInfo
 } from '../../shared/types';
 import type { ConfigStore } from '../store/ConfigStore';
 import { hydratePanelsForRenderer } from '../services/IconAssetService';
+import type { FaviconService } from '../services/FaviconService';
 import { logger } from '../utils/logger';
 import { getIconsPath } from '../utils/paths';
 import type { WindowManager } from '../windows/WindowManager';
 
 export const registerPanelHandlers = (
   configStore: ConfigStore,
-  windowManager: WindowManager
+  windowManager: WindowManager,
+  faviconService: FaviconService
 ): void => {
   const persistCustomIconPath = async (panelId: string, iconPath: string): Promise<string> => {
     const extension = extname(iconPath) || '.png';
@@ -63,6 +66,39 @@ export const registerPanelHandlers = (
     });
   };
 
+  const refreshFaviconInBackground = (panelId: string, url: string): void => {
+    void faviconService.fetch(url).then(async (favicon) => {
+      if (favicon.source === 'letter' || !favicon.iconPath) return;
+
+      const config = await configStore.read();
+      const panel = config.panels.find((candidate) => candidate.id === panelId);
+      if (
+        !panel ||
+        panel.web?.url !== url ||
+        panel.iconSource.kind !== 'auto' ||
+        panel.iconSource.path
+      ) return;
+
+      const nextPanels = config.panels.map((candidate) =>
+        candidate.id === panelId
+          ? {
+              ...candidate,
+              iconSource: {
+                kind: 'auto' as const,
+                path: favicon.iconPath,
+                fallbackLetter: favicon.fallbackLetter,
+                fallbackColor: favicon.fallbackColor
+              }
+            }
+          : candidate
+      );
+      const nextConfig = await configStore.update({ panels: nextPanels });
+      await emitPanelsUpdated(nextConfig.panels);
+    }).catch((error) => {
+      logger.warn(`Background favicon refresh failed for ${url}`, error);
+    });
+  };
+
   ipcMain.handle(IPC_CHANNELS.panelsList, async (): Promise<IpcResult<PanelDescriptor[]>> => {
     try {
       const config = await configStore.read();
@@ -79,6 +115,11 @@ export const registerPanelHandlers = (
         error: error instanceof Error ? error.message : 'Unknown panel list error'
       };
     }
+  });
+
+  ipcMain.on(IPC_CHANNELS.panelResizeStart, (_event, point: PanelResizeStartPayload) => {
+    if (!Number.isFinite(point?.x) || !Number.isFinite(point?.y)) return;
+    windowManager.startPanelResize(point);
   });
 
   ipcMain.handle(
@@ -104,6 +145,9 @@ export const registerPanelHandlers = (
         });
 
         await emitPanelsUpdated(nextConfig.panels, nextPanel.id);
+        if (nextPanel.web && nextPanel.iconSource.kind === 'auto' && !nextPanel.iconSource.path) {
+          refreshFaviconInBackground(nextPanel.id, nextPanel.web.url);
+        }
 
         return {
           ok: true,
@@ -154,6 +198,9 @@ export const registerPanelHandlers = (
           windowManager.destroyPanelView(payload.id);
         }
         await emitPanelsUpdated(nextConfig.panels, payload.id);
+        if (nextPanel.web && nextPanel.iconSource.kind === 'auto' && !nextPanel.iconSource.path) {
+          refreshFaviconInBackground(nextPanel.id, nextPanel.web.url);
+        }
 
         return {
           ok: true,
@@ -573,27 +620,6 @@ export const registerPanelHandlers = (
         error: error instanceof Error ? error.message : 'Unknown toggle pin error'
       };
     }
-  });
-
-  ipcMain.handle(
-    IPC_CHANNELS.panelCommitResize,
-    async (_event, width: number): Promise<IpcResult<void>> => {
-      try {
-        await windowManager.commitPanelResize(width);
-        return { ok: true, data: undefined };
-      } catch (error) {
-        logger.error('panel:commit-resize failed', error);
-        return {
-          ok: false,
-          error: error instanceof Error ? error.message : 'Unknown commit resize error'
-        };
-      }
-    }
-  );
-
-  ipcMain.on(IPC_CHANNELS.panelResizeDrag, (_event, width: number) => {
-    if (typeof width !== 'number' || !Number.isFinite(width)) return;
-    windowManager.resizeDragPanel(width);
   });
 
   ipcMain.handle(

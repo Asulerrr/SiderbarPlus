@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, ipcMain, Notification, session, shell, WebContentsView } from 'electron';
+import { BrowserView, BrowserWindow, clipboard, ipcMain, shell } from 'electron';
 import { spawn } from 'node:child_process';
 import { join } from 'node:path';
 import type {
@@ -12,29 +12,12 @@ import type {
 } from '../../shared/types';
 import { BrowserService } from '../services/BrowserService';
 import { logger } from '../utils/logger';
+import { SHARED_PARTITION, resolvePanelPartition } from './panelSessionPartition';
+import { WebPanelSessionManager } from './WebPanelSessionManager';
 
-const SHARED_PARTITION = 'persist:shared';
 const CHROME_USER_AGENT = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${process.versions.chrome} Safari/537.36`;
 const MOBILE_USER_AGENT =
   'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1';
-
-const resolvePartition = (descriptor: PanelDescriptor): string => {
-  const web = descriptor.web;
-  if (!web) return SHARED_PARTITION;
-
-  if (web.sessionGroup === '__isolated__') {
-    return `persist:panel-${descriptor.id}`;
-  }
-  if (web.sessionGroup) {
-    return `persist:group-${web.sessionGroup}`;
-  }
-
-  if (web.isolatedSession) {
-    return `persist:panel-${descriptor.id}`;
-  }
-
-  return SHARED_PARTITION;
-};
 
 interface WebPanelHostDependencies {
   readConfig: () => Promise<AppConfig>;
@@ -50,23 +33,20 @@ interface ViewMeta {
 const MAX_CACHED_VIEWS = 8;
 
 export class WebPanelHost {
-  private readonly views = new Map<string, WebContentsView>();
+  private readonly views = new Map<string, BrowserView>();
   private readonly meta = new Map<string, ViewMeta>();
   private readonly partitions = new Map<string, string>();
-  private readonly lastGoodUrls = new Map<string, string>();
   // LRU order: most-recently-used last
   private readonly lruOrder: string[] = [];
-  private readonly sharedSession = session.fromPartition(SHARED_PARTITION, { cache: true });
   private readonly browserService = new BrowserService();
+  private readonly sessionManager = new WebPanelSessionManager(() => this.currentConfig);
   private currentConfig: AppConfig | null = null;
-  private readonly sessionsWithHandlers = new Set<string>();
-  private readonly popupWebContentsIds = new Set<number>();
   private readonly panelUrls = new Map<string, string>();
   private readonly translatePanelIds = new Set<string>();
   private readonly popupParentMap = new Map<number, string>(); // popup wcId → parent panelId
 
   constructor(private readonly dependencies: WebPanelHostDependencies) {
-    this.ensureSessionHandlers(SHARED_PARTITION);
+    this.sessionManager.ensureSession(SHARED_PARTITION);
     void this.refreshConfig();
 
     // IPC: popup preload requests parent URL for window.opener.location
@@ -106,11 +86,13 @@ export class WebPanelHost {
           const escaped = JSON.stringify(data);
 
           view.webContents.executeJavaScript(`
-            if (typeof window.__googleLoginReceive === 'function') {
-              window.__googleLoginReceive(${escaped});
-            }
-          `).then(() => logger.info('[GoogleLogin] __googleLoginReceive OK'))
-            .catch((e) => logger.info(`[GoogleLogin] __googleLoginReceive failed: ${e}`));
+            window.dispatchEvent(new MessageEvent('message', {
+              data: ${escaped},
+              origin: 'https://accounts.google.com',
+              source: window
+            }));
+          `).then(() => logger.info('[GoogleLogin] credential dispatched'))
+            .catch((e) => logger.info(`[GoogleLogin] credential dispatch failed: ${e}`));
         }
       }
 
@@ -141,8 +123,21 @@ export class WebPanelHost {
     this.currentConfig = await this.dependencies.readConfig();
   }
 
-  getOrCreateView(descriptor: PanelDescriptor): WebContentsView {
-    const partition = resolvePartition(descriptor);
+  async clearAllStorageData(): Promise<void> {
+    const config = await this.getFreshConfig();
+    await this.sessionManager.clearAllStorageData(config);
+    for (const view of this.views.values()) {
+      if (!view.webContents.isDestroyed()) view.webContents.reload();
+    }
+  }
+
+  async flushCookies(): Promise<void> {
+    const config = await this.getFreshConfig();
+    await this.sessionManager.flushCookies(config);
+  }
+
+  getOrCreateView(descriptor: PanelDescriptor): BrowserView {
+    const partition = resolvePanelPartition(descriptor);
 
     const existing = this.views.get(descriptor.id);
     if (existing) {
@@ -156,21 +151,20 @@ export class WebPanelHost {
       }
     }
 
-    const view = new WebContentsView({
+    const view = new BrowserView({
       webPreferences: {
         partition,
         preload: join(__dirname, '../preload/webPanel.js'),
         nodeIntegration: false,
-        contextIsolation: false,
-        sandbox: false
+        contextIsolation: true,
+        sandbox: true
       } as Electron.WebPreferences
     });
-
     this.partitions.set(descriptor.id, partition);
     if (descriptor.web?.url) {
       this.panelUrls.set(descriptor.id, descriptor.web.url);
     }
-    this.ensureSessionHandlers(partition);
+    this.sessionManager.ensureSession(partition);
 
     view.webContents.setBackgroundThrottling(false);
     view.webContents.setVisualZoomLevelLimits(1, 3).catch(() => undefined);
@@ -191,8 +185,8 @@ export class WebPanelHost {
                 partition,
                 preload: join(__dirname, '../preload/googleLogin.js'),
                 nodeIntegration: false,
-                contextIsolation: false,
-                sandbox: false
+                contextIsolation: true,
+                sandbox: true
               }
             }
           };
@@ -224,8 +218,8 @@ export class WebPanelHost {
               partition,
               preload: join(__dirname, '../preload/webPanelPopup.js'),
               nodeIntegration: false,
-              contextIsolation: false,
-              sandbox: false
+              contextIsolation: true,
+              sandbox: true
             }
           }
         };
@@ -242,8 +236,8 @@ export class WebPanelHost {
             partition,
             preload: join(__dirname, '../preload/webPanelPopup.js'),
             nodeIntegration: false,
-            contextIsolation: false,
-            sandbox: false
+            contextIsolation: true,
+            sandbox: true
           }
         }
       };
@@ -272,36 +266,33 @@ export class WebPanelHost {
         logger.info(`[Popup:console] ${message}`);
       });
 
-      // Track popup so onBeforeRequest allows its Google requests through
-      this.popupWebContentsIds.add(popupId);
       popup.on('closed', () => {
-        this.popupWebContentsIds.delete(popupId);
         this.popupParentMap.delete(popupId);
       });
 
       let isGoogleLogin = false;
+      let callbackReached = false;
       let closeTimer: ReturnType<typeof setTimeout> | null = null;
 
-      const checkCallback = (url: string) => {
+      const observeGoogleFlow = (url: string) => {
         try {
           const host = new URL(url).hostname;
-          if (!host.endsWith('.google.com') && host !== 'google.com') {
+          if (host === 'google.com' || host.endsWith('.google.com')) {
             isGoogleLogin = true;
+          } else if (isGoogleLogin) {
+            callbackReached = true;
           }
         } catch { /* */ }
       };
 
-      popup.webContents.on('did-navigate', (_e, u) => checkCallback(u));
-      popup.webContents.on('did-navigate-in-page', (_e, u) => checkCallback(u));
+      popup.webContents.on('did-navigate', (_e, u) => observeGoogleFlow(u));
+      popup.webContents.on('did-navigate-in-page', (_e, u) => observeGoogleFlow(u));
 
       popup.webContents.on('did-finish-load', () => {
-        if (!isGoogleLogin) {
-          try {
-            const currentUrl = popup.webContents.getURL();
-            checkCallback(currentUrl);
-          } catch { /* */ }
-        }
-        if (!isGoogleLogin) return;
+        try {
+          observeGoogleFlow(popup.webContents.getURL());
+        } catch { /* */ }
+        if (!callbackReached) return;
         if (closeTimer) clearTimeout(closeTimer);
         logger.info('[Popup] Callback page loaded (did-create-window), resetting 8s close timer');
         closeTimer = setTimeout(async () => {
@@ -317,7 +308,7 @@ export class WebPanelHost {
       });
 
       popup.on('closed', () => {
-        this.popupWebContentsIds.delete(popupId);
+        if (!isGoogleLogin) return;
         // Reload parent so it picks up the new Google auth state.
         // 3s delay gives the GIS credential handler time to exchange
         // the token with the backend and set the session cookie.
@@ -357,7 +348,7 @@ export class WebPanelHost {
     return view;
   }
 
-  getView(panelId: string | null): WebContentsView | null {
+  getView(panelId: string | null): BrowserView | null {
     if (!panelId) {
       return null;
     }
@@ -575,7 +566,6 @@ export class WebPanelHost {
     this.views.delete(panelId);
     this.meta.delete(panelId);
     this.partitions.delete(panelId);
-    this.lastGoodUrls.delete(panelId);
     this.panelUrls.delete(panelId);
     const idx = this.lruOrder.indexOf(panelId);
     if (idx !== -1) this.lruOrder.splice(idx, 1);
@@ -627,45 +617,12 @@ export class WebPanelHost {
     return nextConfig;
   }
 
-  private bindViewEvents(panelId: string, view: WebContentsView): void {
-    // will-navigate fallback — onBeforeRequest is the primary interception,
-    // but will-navigate catches cached navigations that skip the network layer.
-    view.webContents.on('will-navigate', (event, url) => {
-      try {
-        if (new URL(url).hostname === 'accounts.google.com') {
-          event.preventDefault();
-          // Restore page immediately — preventDefault() may leave it in broken state
-          const restoreUrl = this.lastGoodUrls.get(panelId);
-          if (restoreUrl) {
-            view.webContents.loadURL(restoreUrl).catch(() => undefined);
-          }
-          this.openGoogleLoginPopup(
-            url,
-            this.partitions.get(panelId) ?? SHARED_PARTITION,
-            view,
-            this.panelUrls.get(panelId),
-            panelId
-          );
-        }
-      } catch { /* ignore */ }
-    });
-
+  private bindViewEvents(panelId: string, view: BrowserView): void {
     view.webContents.on('did-navigate', (_event, url) => {
-      try {
-        if (new URL(url).hostname !== 'accounts.google.com') {
-          this.lastGoodUrls.set(panelId, url);
-        }
-      } catch { /* */ }
       this.emitNavigationState(panelId, view, url);
     });
-
     view.webContents.on('did-navigate-in-page', (_event, url, isMainFrame) => {
       if (isMainFrame) {
-        try {
-          if (new URL(url).hostname !== 'accounts.google.com') {
-            this.lastGoodUrls.set(panelId, url);
-          }
-        } catch { /* */ }
         this.emitNavigationState(panelId, view, url);
       }
     });
@@ -687,7 +644,7 @@ export class WebPanelHost {
     });
   }
 
-  private emitNavigationState(panelId: string, view: WebContentsView, url?: string): void {
+  private emitNavigationState(panelId: string, view: BrowserView, url?: string): void {
     const emit = (): void => {
       if (view.webContents.isDestroyed()) {
         return;
@@ -710,7 +667,7 @@ export class WebPanelHost {
 
   private applyViewPreferences(
     panelId: string,
-    view: WebContentsView,
+    view: BrowserView,
     webConfig?: WebPanelConfig
   ): void {
     if (!webConfig) {
@@ -725,255 +682,7 @@ export class WebPanelHost {
     view.webContents.setZoomFactor(webConfig.zoomFactor || 1);
   }
 
-  private openGoogleLoginPopup(
-    url: string,
-    panelPartition: string,
-    parentView: WebContentsView | null,
-    fallbackUrl?: string,
-    panelId?: string
-  ): BrowserWindow {
-    logger.info(`[GoogleLogin] Opening popup panelPartition=${panelPartition} fallbackUrl=${fallbackUrl ?? 'none'}`);
-
-    // Use parent's partition so window.opener.postMessage reaches the parent.
-    const popup = new BrowserWindow({
-      width: 520,
-      height: 600,
-      autoHideMenuBar: true,
-      backgroundColor: '#1B1B1B',
-      webPreferences: {
-        partition: panelPartition,
-        preload: join(__dirname, '../preload/googleLogin.js'),
-        nodeIntegration: false,
-        contextIsolation: false,
-        sandbox: false
-      }
-    });
-
-    // Capture ID/session immediately — popup.webContents is inaccessible after destroy
-    const popupId = popup.webContents.id;
-    const popupSession = popup.webContents.session;
-    logger.info(`[GoogleLogin] Popup created id=${popupId} sessionPartition=${panelPartition}`);
-
-    // Track popup → parent panel for IPC credential forwarding
-    if (panelId) {
-      this.popupParentMap.set(popupId, panelId);
-    }
-
-    // Track popup so onBeforeRequest allows its Google requests through
-    this.popupWebContentsIds.add(popupId);
-
-    // Relay popup console to main process log
-    popup.webContents.on('console-message', (_e, _level, message) => {
-      logger.info(`[Popup:console] ${message}`);
-    });
-    popup.on('closed', () => {
-      this.popupWebContentsIds.delete(popupId);
-      this.popupParentMap.delete(popupId);
-      logger.info(`[GoogleLogin] Popup closed id=${popupId}`);
-      if (parentView && !parentView.webContents.isDestroyed()) {
-        setTimeout(async () => {
-          if (parentView.webContents.isDestroyed()) return;
-
-          if (fallbackUrl) {
-            logger.info(`[GoogleLogin] Loading fallbackUrl=${fallbackUrl}`);
-            parentView.webContents.loadURL(fallbackUrl).catch(() => undefined);
-          } else {
-            logger.info('[GoogleLogin] Reloading parent');
-            parentView.webContents.reload();
-          }
-        }, 3000);
-      }
-    });
-
-    popup.webContents.setUserAgent(CHROME_USER_AGENT);
-
-    let callbackReached = false;
-    const checkCallback = (url: string) => {
-      try {
-        const host = new URL(url).hostname;
-        if (!host.endsWith('.google.com') && host !== 'google.com') {
-          if (!callbackReached) {
-            callbackReached = true;
-            logger.info('[GoogleLogin] Callback URL detected, will auto-close after 8s');
-          }
-        }
-      } catch { /* */ }
-    };
-    popup.webContents.on('did-navigate', (_e, popupUrl) => {
-      logger.info(`[GoogleLogin] Popup navigated to: ${popupUrl}`);
-      checkCallback(popupUrl);
-    });
-    popup.webContents.on('did-navigate-in-page', (_e, popupUrl) => checkCallback(popupUrl));
-    let closeTimer: ReturnType<typeof setTimeout> | null = null;
-    popup.webContents.on('did-finish-load', () => {
-      if (!callbackReached) {
-        try { checkCallback(popup.webContents.getURL()); } catch { /* */ }
-      }
-      if (!callbackReached) return;
-      if (closeTimer) clearTimeout(closeTimer);
-      logger.info('[GoogleLogin] Callback page loaded, resetting 8s auto-close timer');
-      closeTimer = setTimeout(async () => {
-        if (popup.isDestroyed()) return;
-        try {
-          await Promise.race([
-            popupSession.cookies.flushStore(),
-            new Promise(r => setTimeout(r, 3000))
-          ]);
-          logger.info('[GoogleLogin] Cookie store flushed');
-        } catch (e) {
-          logger.info(`[GoogleLogin] Cookie flush failed: ${e}`);
-        }
-        popup.close();
-      }, 8000);
-    });
-
-    popup.loadURL(url);
-    return popup;
-  }
-
-  private ensureSessionHandlers(partition: string): void {
-    if (this.sessionsWithHandlers.has(partition)) return;
-    this.sessionsWithHandlers.add(partition);
-
-    const ses = session.fromPartition(partition, { cache: true });
-
-    // Intercept main-frame navigations to Google login BEFORE page loads.
-    // Unlike will-navigate, this fires at the HTTP request level, so the page
-    // never starts loading the Google URL (no error flash).
-    // Popup windows are tracked separately so their Google requests pass through.
-    ses.webRequest.onBeforeRequest(
-      { urls: ['https://accounts.google.com/*'] },
-      (details, callback) => {
-        if (details.resourceType !== 'mainFrame' || !details.webContents) {
-          callback({});
-          return;
-        }
-
-        const entry = [...this.views.entries()].find(
-          ([, v]) => v.webContents.id === details.webContents!.id
-        );
-
-        // Only intercept navigations from known panel views.
-        // Popups (including Google login) aren't in this.views, so their
-        // requests pass through — no need to track popup IDs separately.
-        if (!entry) {
-          callback({});
-          return;
-        }
-
-        const panelId = entry[0];
-        const parentView = entry[1];
-        logger.info('[onBeforeRequest] Google redirect intercepted', { panelId, partition, panelUrl: panelId ? this.panelUrls.get(panelId) : undefined });
-
-        this.openGoogleLoginPopup(
-          details.url,
-          partition,
-          parentView,
-          panelId ? this.panelUrls.get(panelId) : undefined,
-          panelId
-        );
-        callback({ cancel: true });
-
-        // Restore panel to last good URL so reload() after popup close
-        // doesn't retry the cancelled redirect target.
-        if (panelId && parentView && !parentView.webContents.isDestroyed()) {
-          const restoreUrl = this.lastGoodUrls.get(panelId);
-          if (restoreUrl) {
-            parentView.webContents.loadURL(restoreUrl).catch(() => undefined);
-          }
-        }
-      }
-    );
-
-    ses.setPermissionCheckHandler((_webContents, permission, requestingOrigin) => {
-      if (permission === 'clipboard-read' || permission === 'clipboard-sanitized-write') return true;
-      if (permission !== 'notifications') return false;
-      return this.isNotificationAllowed(requestingOrigin);
-    });
-
-    ses.setPermissionRequestHandler((webContents, permission, callback) => {
-      if (permission === 'clipboard-read' || permission === 'clipboard-sanitized-write') {
-        callback(true);
-        return;
-      }
-      if (permission !== 'notifications') { callback(false); return; }
-      callback(this.isNotificationAllowed(webContents.getURL()));
-    });
-
-    // Temporarily disabled to test if header modification causes Google login failure
-    // ses.webRequest.onBeforeSendHeaders(
-    //   { urls: ['https://accounts.google.com/*', 'https://*.google.com/*', 'https://google.com/*'] },
-    //   (details, callback) => {
-    //     delete details.requestHeaders['Sec-Ch-Ua'];
-    //     delete details.requestHeaders['Sec-Ch-Ua-Mobile'];
-    //     delete details.requestHeaders['Sec-Ch-Ua-Platform'];
-    //     details.requestHeaders['User-Agent'] = CHROME_USER_AGENT;
-    //     callback({ requestHeaders: details.requestHeaders });
-    //   }
-    // );
-
-    // Strip Cross-Origin-Opener-Policy from Google responses so the popup's
-    // window.opener.postMessage() can reach the parent panel.
-    // Google sends COOP: same-origin which severs the opener relationship.
-    ses.webRequest.onHeadersReceived(
-      { urls: ['https://accounts.google.com/*', 'https://*.google.com/*'] },
-      (details, callback) => {
-        const h = details.responseHeaders;
-        if (h) {
-          delete h['cross-origin-opener-policy'];
-          delete h['cross-origin-embedder-policy'];
-        }
-        callback({ responseHeaders: h });
-      }
-    );
-
-    ses.on('will-download', (_event, item) => {
-      const savePath = join(app.getPath('downloads'), item.getFilename());
-      item.setSavePath(savePath);
-      new Notification({ title: 'SideBar', body: `开始下载 ${item.getFilename()}` }).show();
-      item.once('done', (_downloadEvent, state) => {
-        if (state === 'completed') {
-          const n = new Notification({ title: 'SideBar', body: `${item.getFilename()} 下载完成` });
-          n.on('click', () => shell.showItemInFolder(savePath));
-          n.show();
-        } else {
-          new Notification({ title: 'SideBar', body: `${item.getFilename()} 下载失败` }).show();
-        }
-      });
-    });
-  }
-
   private getPanelSession(panelId: string): Electron.Session {
-    const partition = this.partitions.get(panelId);
-    if (partition && partition !== SHARED_PARTITION) {
-      return session.fromPartition(partition, { cache: true });
-    }
-    return this.sharedSession;
-  }
-
-  private isNotificationAllowed(originOrUrl: string): boolean {
-    const config = this.currentConfig;
-    if (!config) {
-      return true;
-    }
-
-    try {
-      const origin = new URL(originOrUrl).origin;
-      const descriptor = config.panels.find((panel) => {
-        if (!panel.web?.url) {
-          return false;
-        }
-
-        try {
-          return new URL(panel.web.url).origin === origin;
-        } catch {
-          return false;
-        }
-      });
-
-      return !(descriptor?.web?.notificationsSnoozed ?? false);
-    } catch {
-      return true;
-    }
+    return this.sessionManager.getSession(this.partitions.get(panelId));
   }
 }

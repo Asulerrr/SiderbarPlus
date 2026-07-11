@@ -39,6 +39,24 @@ interface Shell32Bindings {
   appBarDataSize: number;
 }
 
+const registerTaskbarCreatedMessage = (): number | null => {
+  if (process.platform !== 'win32') return null;
+  try {
+    const lib = koffi.load('user32.dll');
+    const registerWindowMessage = lib.func(
+      'uint32 __stdcall RegisterWindowMessageW(str16 lpString)'
+    ) as unknown as (name: string) => number;
+    const message = registerWindowMessage('TaskbarCreated');
+    return message > 0 ? message : null;
+  } catch (error) {
+    logger.error(
+      'AppBarService failed to register TaskbarCreated message',
+      error
+    );
+    return null;
+  }
+};
+
 interface AppBarEntry {
   hwnd: bigint;
   edge: 'left' | 'right';
@@ -91,14 +109,20 @@ export interface PhysicalRect {
 
 export class AppBarService {
   private readonly bindings: Shell32Bindings | null;
+  private readonly taskbarCreatedMessage: number | null;
   private readonly entries = new Map<string, AppBarEntry>();
 
   constructor() {
     this.bindings = loadShell32();
+    this.taskbarCreatedMessage = registerTaskbarCreatedMessage();
   }
 
   isAvailable(): boolean {
     return this.bindings !== null;
+  }
+
+  getTaskbarCreatedMessage(): number | null {
+    return this.taskbarCreatedMessage;
   }
 
   /**
@@ -211,6 +235,11 @@ export class AppBarService {
 
   isRegistered(id: string): boolean {
     return this.entries.has(id);
+  }
+
+  /** Explorer restart discards Shell registrations while the HWNDs remain valid. */
+  forgetRegistrations(): void {
+    this.entries.clear();
   }
 
   private toEdgeCode(edge: 'left' | 'right'): number {

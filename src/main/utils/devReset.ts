@@ -56,14 +56,6 @@ export const resetDevelopmentData = async (): Promise<void> => {
   ];
   const targets = wipeConfig ? [...configTargets, ...sessionTargets] : sessionTargets;
 
-  try {
-    // 只清缓存，不碰 shared session 的 cookies/存储——保留登录态
-    const sharedSession = session.fromPartition(DEV_SHARED_PARTITION, { cache: true });
-    await sharedSession.clearCache();
-  } catch (error) {
-    logger.warn('Failed to clear development shared session cache.', error);
-  }
-
   for (const target of targets) {
     try {
       await safeRemove(target);

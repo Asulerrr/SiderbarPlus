@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { APP_NAME, APP_VERSION } from '@shared/constants';
+import { useEffect, useState } from 'react';
+import { APP_NAME } from '@shared/constants';
 
 type CheckState =
   | { kind: 'idle' }
@@ -11,6 +11,13 @@ type CheckState =
 
 export function About({ textColor }: { textColor: string }): JSX.Element {
   const [state, setState] = useState<CheckState>({ kind: 'idle' });
+  const [appVersion, setAppVersion] = useState('...');
+
+  useEffect(() => {
+    void window.panelAPI.getAppVersion().then((result) => {
+      if (result.ok) setAppVersion(result.data);
+    });
+  }, []);
 
   const onCheck = async (): Promise<void> => {
     setState({ kind: 'checking' });
@@ -41,7 +48,7 @@ export function About({ textColor }: { textColor: string }): JSX.Element {
         </div>
         <div className="mt-1.5 flex items-baseline gap-3">
           <span className="font-mono text-[10px] tracking-[0.18em]" style={s(0.35)}>VERSION</span>
-          <span className="font-mono text-[13px] tracking-wider text-accent">{APP_VERSION}</span>
+          <span className="font-mono text-[13px] tracking-wider text-accent">{appVersion}</span>
         </div>
       </div>
 

@@ -41,6 +41,21 @@ const normalizeUrl = (value: string): string => {
   return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
 };
 
+const canPreviewFavicon = (value: string): boolean => {
+  try {
+    const target = new URL(value);
+    if (!['http:', 'https:'].includes(target.protocol)) return false;
+    const hostname = target.hostname.toLowerCase();
+    if (hostname === 'localhost' || hostname.includes(':') || /^\d+(?:\.\d+){3}$/.test(hostname)) {
+      return true;
+    }
+    const labels = hostname.split('.');
+    return labels.length >= 2 && labels.at(-1)!.length >= 2;
+  } catch {
+    return false;
+  }
+};
+
 const deriveTitle = (url: string): string => {
   try {
     const target = new URL(url);
@@ -441,11 +456,12 @@ export default function App(): JSX.Element {
 
   useEffect(() => {
     if (customIconPath) {
+      setFaviconLoading(false);
       return;
     }
 
     const normalizedUrl = normalizeUrl(addSiteUrl);
-    if (!normalizedUrl) {
+    if (!normalizedUrl || !canPreviewFavicon(normalizedUrl)) {
       setAutoFavicon(null);
       setFaviconError(null);
       setFaviconLoading(false);
@@ -453,6 +469,7 @@ export default function App(): JSX.Element {
     }
 
     let cancelled = false;
+    setAutoFavicon((current) => current?.url === normalizedUrl ? current : null);
     const timer = window.setTimeout(() => {
       setFaviconLoading(true);
       setFaviconError(null);
@@ -471,7 +488,7 @@ export default function App(): JSX.Element {
         setAutoFavicon(null);
         setFaviconError(result.error);
       });
-    }, 450);
+    }, 700);
 
     return () => {
       cancelled = true;
@@ -503,17 +520,7 @@ export default function App(): JSX.Element {
     }
   };
 
-  const resolveIconSource = async (normalizedUrl: string) => {
-    let faviconForSubmit = autoFavicon;
-
-    if (!customIconPath && !faviconForSubmit) {
-      const faviconResult = await window.panelAPI.fetchFavicon({ url: normalizedUrl });
-      if (faviconResult.ok) {
-        faviconForSubmit = faviconResult.data;
-        setAutoFavicon(faviconResult.data);
-      }
-    }
-
+  const resolveIconSource = (normalizedUrl: string) => {
     if (customIconPath) {
       return {
         kind: 'custom' as const,
@@ -521,7 +528,8 @@ export default function App(): JSX.Element {
       };
     }
 
-    if (faviconForSubmit) {
+    const faviconForSubmit = autoFavicon?.url === normalizedUrl ? autoFavicon : null;
+    if (faviconForSubmit?.source !== 'letter' && faviconForSubmit?.iconPath) {
       return {
         kind: 'auto' as const,
         path: faviconForSubmit.iconPath,
@@ -556,7 +564,7 @@ export default function App(): JSX.Element {
 
     setSubmittingSite(true);
     setAddSiteError(null);
-    const iconSource = await resolveIconSource(normalizedUrl);
+    const iconSource = resolveIconSource(normalizedUrl);
     const isEditSitePanel = chromeState.builtinWidgetId === 'edit-site';
     const targetPanelId = chromeState.builtinTargetPanelId;
 
@@ -670,7 +678,7 @@ export default function App(): JSX.Element {
           </div>
         ) : null}
         <div
-          className={`absolute flex flex-col overflow-hidden shadow-[0_0_0_1px_rgba(0,0,0,0.18)] ${panelCardRadius} ${panelCardBorder}`}
+          className={`absolute flex flex-col overflow-hidden ${panelCardRadius} ${panelCardBorder}`}
           style={{
             left: chromeState.edge === 'right' ? CONTENT_INSET : 0,
             right: chromeState.edge === 'left' ? CONTENT_INSET : 0,
@@ -679,6 +687,8 @@ export default function App(): JSX.Element {
             backgroundColor: surface.bg,
             borderColor: borderStyle,
             borderWidth: 1,
+            borderRightWidth: chromeState.edge === 'right' ? 0 : 1,
+            borderLeftWidth: chromeState.edge === 'left' ? 0 : 1,
             borderStyle: 'solid'
           }}
         >

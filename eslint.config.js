@@ -5,15 +5,27 @@ const globals = require('globals');
 
 module.exports = [
   {
-    ignores: ['out/**', 'dist/**', 'node_modules/**']
+    ignores: ['out/**', 'dist/**', 'node_modules/**', 'electron.vite.config.*.mjs']
   },
   {
     ...js.configs.recommended,
-    files: ['**/*.{js,cjs,mjs}'],
+    files: ['**/*.{js,cjs}'],
     languageOptions: {
       ...js.configs.recommended.languageOptions,
       ecmaVersion: 'latest',
       sourceType: 'commonjs',
+      globals: {
+        ...globals.node
+      }
+    }
+  },
+  {
+    ...js.configs.recommended,
+    files: ['**/*.mjs'],
+    languageOptions: {
+      ...js.configs.recommended.languageOptions,
+      ecmaVersion: 'latest',
+      sourceType: 'module',
       globals: {
         ...globals.node
       }
@@ -48,6 +60,7 @@ module.exports = [
       ...reactPlugin.configs.recommended.rules,
       'no-undef': 'off',
       'no-unused-vars': 'off',
+      'no-redeclare': 'off',
       'react/react-in-jsx-scope': 'off'
     }
   },

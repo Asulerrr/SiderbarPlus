@@ -1,5 +1,5 @@
-import { BrowserWindow, screen, WebContentsView } from 'electron';
-import { BUILTIN_ADD_SITE_ID, BUILTIN_SETTINGS_ID } from '../../shared/constants';
+import { BrowserView, BrowserWindow, screen } from 'electron';
+import { BUILTIN_SETTINGS_ID } from '../../shared/constants';
 import { IPC_CHANNELS } from '../../shared/ipc-contracts';
 import { buildBuiltinPanelId, parseBuiltinPanelId } from '../../shared/builtinPanels';
 import type { AppConfig, AppearanceConfig, Edge, PanelDescriptor, PanelState, SiteInfo } from '../../shared/types';
@@ -11,9 +11,14 @@ import type { PanelWindow } from '../windows/PanelWindow';
 import { getDockBounds, getTargetDisplay } from '../utils/display';
 import { getPreferredPanelWidth } from '../utils/panelBounds';
 import { WebPanelHost } from './WebPanelHost';
+import { createBuiltinPanelDescriptor } from './builtinPanelDescriptor';
 
 export { clampPanelWidth } from './panelResize.ts';
-import { clampPanelWidth as _clampPanelWidth } from './panelResize.ts';
+import {
+  clampPanelWidth as _clampPanelWidth,
+  getPanelWidthRange,
+  getRightAnchoredViewX
+} from './panelResize.ts';
 
 const CHROME_HEIGHT = 76;
 const OPEN_ANIMATION_MS = 300;
@@ -27,6 +32,7 @@ const PANEL_TOP_INSET = 8;
 const PANEL_BORDER_WIDTH = 1;
 const POINTER_TRACK_INTERVAL_MS = 80;
 const POINTER_TRACK_MARGIN = 3;
+const RESIZE_RELEASE_MOVE_THRESHOLD = 12;
 
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => {
@@ -41,7 +47,10 @@ export class PanelManager {
   private readonly animationWindow: PanelAnimationWindow;
   private readonly panelWindowRef: BrowserWindow;
   private readonly animationWindowRef: BrowserWindow;
+  /** Latest requested panel; it may differ from what is currently on screen during a switch. */
   private currentPanelId: string | null = null;
+  /** Panel whose chrome/content has been synchronously committed to the panel window. */
+  private presentedPanelId: string | null = null;
   private state: PanelLifecycleState = 'closed';
   private closeTimer: NodeJS.Timeout | null = null;
   private pointerTracker: NodeJS.Timeout | null = null;
@@ -62,7 +71,8 @@ export class PanelManager {
   private builtinPreferredWidths = new Map<string, number>();
   private hoverCloseDelayMs = 300;
   private pendingDestroyId: string | null = null;
-  private lastResizeDragWidth: number | null = null;
+  private resizeReleaseGuardPoint: Electron.Point | null = null;
+  private nativeResizeActive = false;
   private readonly snapshots = new Map<string, string>();
   private readonly createdAt = Date.now();
 
@@ -99,6 +109,19 @@ export class PanelManager {
         this.emitNavigation(payload.panelId, payload.url, payload.canGoBack),
       emitLoading: (payload) => this.emitLoading(payload.panelId, payload.isLoading)
     });
+
+    this.panelWindowRef.on('will-resize', (event, newBounds, details) => {
+      const allowedEdge = this.edge === 'right' ? 'left' : 'right';
+      if (this.state !== 'open' || details.edge !== allowedEdge) {
+        event.preventDefault();
+        return;
+      }
+      this.beginNativeResize();
+      this.panelWindow.updateResizeBackdrop(newBounds);
+      this.anchorViewBeforeNativeResize(newBounds);
+    });
+    this.panelWindowRef.on('resize', () => this.layoutViewAfterNativeResize());
+    this.panelWindowRef.on('resized', () => this.finishNativeResize());
   }
 
   async hoverPanel(panelId: string): Promise<void> {
@@ -165,7 +188,7 @@ export class PanelManager {
 
     this.sendAnimateIn(descriptor, config.layout.edge, this.snapshots.get(panelId) ?? null, config.appearance);
     this.panelWindowRef.setOpacity(0);
-    this.attachDescriptorView(descriptor, config.layout.edge);
+    this.presentDescriptorView(descriptor, config.layout.edge);
     await sleep(PANEL_WINDOW_SHOW_SETTLE_MS);
     if (token !== this.lifecycleToken || this.state !== 'opening' || this.currentPanelId !== panelId) {
       return;
@@ -198,6 +221,9 @@ export class PanelManager {
       return;
     }
     setTimeout(() => {
+      if (this.nativeResizeActive) {
+        return;
+      }
       if (BrowserWindow.getFocusedWindow()) {
         return;
       }
@@ -234,13 +260,13 @@ export class PanelManager {
     void this.configStore.read().then((config) => {
       void this.webPanelHost.refreshConfig();
       this.applyHoverConfig(config);
-      if (this.sticky || this.panelMode === 'pinned' || this.isHideMuted()) {
-        return;
-      }
+      if (this.isAutoHideBlocked()) return;
 
-      this.pendingDestroyId = destroy ? this.currentPanelId : null;
+      this.pendingDestroyId = destroy ? this.presentedPanelId : null;
       this.pointerOutsideSince = Date.now();
       this.closeTimer = setTimeout(() => {
+        this.closeTimer = null;
+        if (this.isAutoHideBlocked()) return;
         void this.hidePanel(destroy);
       }, config.behavior.hoverCloseDelayMs);
     });
@@ -251,18 +277,26 @@ export class PanelManager {
       return;
     }
 
-    const config = await this.configStore.read();
-    await this.webPanelHost.refreshConfig();
-    const closingPanelId = this.currentPanelId;
+    this.cancelActiveResize();
     this.cancelCloseTimer();
     this.closeMenu();
+    ++this.showPanelToken;
+    ++this.switchToken;
+    const closingPanelId = this.presentedPanelId;
+    this.currentPanelId = closingPanelId;
     this.state = 'closing';
     const token = ++this.lifecycleToken;
-    this.pendingDestroyId = destroy ? this.currentPanelId : this.pendingDestroyId;
-    this.emitState(config.layout.edge, this.panelMode, false);
+    this.pendingDestroyId = destroy ? this.presentedPanelId : this.pendingDestroyId;
+    this.emitState(this.edge, this.panelMode, false);
 
-    const snapshotPanelId = this.currentPanelId;
-    const currentView = this.webPanelHost.getView(this.currentPanelId);
+    const config = await this.configStore.read();
+    await this.webPanelHost.refreshConfig();
+    if (token !== this.lifecycleToken || this.state !== 'closing' || this.currentPanelId !== closingPanelId) {
+      return;
+    }
+
+    const snapshotPanelId = this.presentedPanelId;
+    const currentView = this.webPanelHost.getView(this.presentedPanelId);
     const snapshotDataUrl = await this.captureViewSnapshot(currentView);
     if (snapshotPanelId) {
       if (snapshotDataUrl) {
@@ -307,6 +341,7 @@ export class PanelManager {
     this.panelWindowRef.setIgnoreMouseEvents(true, { forward: true });
     this.hideAnimationWindow();
     this.stopPointerTracking();
+    this.clearPresentedPanel();
 
     if (this.pendingDestroyId) {
       this.webPanelHost.destroyView(this.pendingDestroyId);
@@ -322,6 +357,8 @@ export class PanelManager {
 
   markSticky(): void {
     this.sticky = true;
+    this.cancelCloseTimer();
+    this.pointerOutsideSince = null;
   }
 
   cancelScheduledHide(): void {
@@ -335,7 +372,7 @@ export class PanelManager {
   }
 
   getCurrentPanelId(): string | null {
-    return this.currentPanelId;
+    return this.presentedPanelId;
   }
 
   async getMenuState(panelId: string): Promise<import('../../shared/types').PanelMenuState | null> {
@@ -427,6 +464,14 @@ export class PanelManager {
     this.snapshots.delete(panelId);
   }
 
+  async clearAllWebStorageData(): Promise<void> {
+    await this.webPanelHost.clearAllStorageData();
+  }
+
+  async flushWebPanelCookies(): Promise<void> {
+    await this.webPanelHost.flushCookies();
+  }
+
   /**
    * PRD §5.8.2 切换贴边方向前的强制关闭：
    * - 取消所有计时器/动画 token
@@ -435,14 +480,16 @@ export class PanelManager {
    * - view bounds 归零，等待下次 hoverPanel 时重新挂载
    */
   forceCloseAndResetMode(nextEdge?: Edge, nextDisplayId?: number): void {
+    this.cancelActiveResize();
     this.cancelCloseTimer();
     this.closeMenu();
     this.stopPointerTracking();
     this.lifecycleToken++;
     this.switchToken++;
+    this.showPanelToken++;
 
-    if (this.currentPanelId) {
-      const view = this.webPanelHost.getView(this.currentPanelId);
+    if (this.presentedPanelId) {
+      const view = this.webPanelHost.getView(this.presentedPanelId);
       if (view) {
         view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
       }
@@ -454,11 +501,12 @@ export class PanelManager {
 
     this.panelMode = 'hover';
     this.sticky = false;
-    this.lastResizeDragWidth = null;
+    this.resizeReleaseGuardPoint = null;
     this.pointerOutsideSince = null;
     this.pendingDestroyId = null;
     this.state = 'closed';
     this.currentPanelId = null;
+    this.clearPresentedPanel();
     if (nextEdge) {
       this.edge = nextEdge;
     }
@@ -471,95 +519,134 @@ export class PanelManager {
   async togglePin(): Promise<void> {
     if (this.panelMode === 'hover') {
       this.panelMode = 'pinned';
-      this.lastResizeDragWidth = null;
       this.cancelCloseTimer();
       this.emitState(this.edge, this.panelMode);
       return;
     }
     this.panelMode = 'hover';
-    this.lastResizeDragWidth = null;
     this.emitState(this.edge, this.panelMode);
     if (this.state === 'open') {
       await this.hidePanel(false);
     }
   }
 
-  /**
-   * 拖拽中途的宽度同步（rAF 节流来自渲染进程）。
-   *
-   * 本方法明确偏离 PRD §5.14 铁律 3（"固定模式拖拽期间不改原生窗口几何"）。
-   * 理由：M5 架构下 PanelWindow 宽度 = chrome 宽度，CSS-only 伸缩物理不可达。
-   * 铁律 3 的底层原因（Win32 AppBar 系统工作区重计算导致其他窗口避让）在 v1.0
-   * 不接入 AppBar 时不成立（PRD §5.7.1 明文禁用 AppBar）。剩余的 Electron
-   * setBounds 高频合成闪烁已由渲染进程 rAF 节流到 ≤60fps 控制。
-   * 合规检查：`view.setBounds` 仍遵守铁律 2，仅在 mouseup (commitResize) 调用 1 次。
-   * 详见 docs/superpowers/specs/2026-04-24-m6-design.md §3.2。
-   */
-  resizeDrag(newWidth: number): void {
-    if (this.state !== 'open') {
-      return;
+  startNativeResize(point: Electron.Point): void {
+    if (this.state !== 'open' || this.nativeResizeActive) return;
+    this.beginNativeResize();
+    if (!this.panelWindow.startNativeResize(this.edge, point)) {
+      this.cancelActiveResize();
     }
-    // Bug 2: clamp must use dock's display, not cursor's display.
-    // 双屏下鼠标可能在另一屏，但 dock 在 displayId 指定屏，必须用该屏 workArea 约束宽度。
-    const display = getTargetDisplay(this.displayId);
-    const width = _clampPanelWidth(newWidth, display.workArea.width, this.panelMaxWidthPercent);
-    // Bug 3: 宽度未变化时跳过 setBounds，避免 Windows 相同 bounds 仍重绘闪烁。
-    if (this.lastResizeDragWidth === width) {
-      return;
-    }
-    this.lastResizeDragWidth = width;
-    this.panelWindow.updateBounds(this.edge, width, this.displayId);
-    // Bug 13: 拖拽期间不动 animationWindow，避免双 transparent 窗口同帧 setBounds 频闪
-    // 不动 view；chrome 在 view 前方覆盖"拉出"区域
   }
 
-  async commitResize(newWidth: number): Promise<void> {
-    // Bug 3: 拖拽结束，重置去重缓存，下次拖拽干净起步。
-    this.lastResizeDragWidth = null;
-    // mouseup 终点：一次性对齐 view + 持久化 panelDefaultWidth
-    // Bug 2: 同 resizeDrag，用 dock 所在屏 workArea。
+  private beginNativeResize(): void {
+    if (this.nativeResizeActive) return;
+    this.nativeResizeActive = true;
+    this.panelWindow.beginResizeBackdrop();
+    this.resizeReleaseGuardPoint = null;
+    this.cancelCloseTimer();
+    this.pointerOutsideSince = null;
+    this.sendResizeState(true);
+  }
+
+  private getPresentedWebView(): BrowserView | null {
+    if (!this.presentedPanelId) return null;
+    const view = this.webPanelHost.getView(this.presentedPanelId);
+    return view && !view.webContents.isDestroyed() ? view : null;
+  }
+
+  private anchorViewBeforeNativeResize(targetWindowBounds: Electron.Rectangle): void {
+    if (this.edge !== 'right') return;
+    const view = this.getPresentedWebView();
+    if (!view) return;
+
+    const currentWindowWidth = this.panelWindowRef.getBounds().width;
+    const currentContentWidth = this.panelWindowRef.contentView.getBounds().width;
+    const frameWidth = Math.max(0, currentWindowWidth - currentContentWidth);
+    const targetContentWidth = Math.max(0, targetWindowBounds.width - frameWidth);
+    const viewBounds = view.getBounds();
+    const anchoredX = getRightAnchoredViewX(targetContentWidth, viewBounds.width);
+    if (viewBounds.x !== anchoredX) {
+      view.setBounds({ ...viewBounds, x: anchoredX });
+    }
+  }
+
+  private layoutViewAfterNativeResize(): void {
+    if (!this.nativeResizeActive) return;
+    this.panelWindow.updateResizeBackdrop(this.panelWindowRef.getBounds());
+    const view = this.getPresentedWebView();
+    if (view) this.updateViewBounds(view, this.edge);
+  }
+
+  private finishNativeResize(): void {
+    if (!this.nativeResizeActive) return;
+    this.nativeResizeActive = false;
+    const width = this.panelWindowRef.getBounds().width;
+    this.panelWindow.rememberNativeWidth(this.edge, width);
+    const releasePoint = screen.getCursorScreenPoint();
+    this.sendResizeState(false);
+    this.panelWindow.finishResizeBackdrop();
+    void this.commitResize(width, releasePoint).catch((error) => {
+      logger.error('Failed to persist panel resize', error);
+    });
+  }
+
+  private async commitResize(newWidth: number, releasePoint: Electron.Point): Promise<void> {
+    this.cancelCloseTimer();
+    this.pointerOutsideSince = null;
     const display = getTargetDisplay(this.displayId);
     const width = _clampPanelWidth(newWidth, display.workArea.width, this.panelMaxWidthPercent);
 
-    this.panelWindow.updateBounds(this.edge, width, this.displayId);
+    const currentBoundsWidth = this.panelWindowRef.getBounds().width;
+    const currentContentWidth = this.panelWindowRef.contentView.getBounds().width;
+    const adjustedAfterResize = currentBoundsWidth !== width;
+    const contentWidthOverride = adjustedAfterResize
+      ? Math.max(0, width - (currentBoundsWidth - currentContentWidth))
+      : undefined;
+    if (adjustedAfterResize) {
+      this.panelWindow.updateBounds(this.edge, width, this.displayId);
+    }
     // animationWindow 在 commit 保留同步，保证下次 open/close 动画 bounds 正确
     this.animationWindow.updateBounds(this.edge, width, this.displayId);
 
-    const view = this.currentPanelId
-      ? this.webPanelHost.getView(this.currentPanelId)
+    const resizedPanelId = this.presentedPanelId;
+    const view = resizedPanelId
+      ? this.webPanelHost.getView(resizedPanelId)
       : null;
     if (view) {
-      // Bug 11: 复用 updateViewBounds 计算正确 inset/border，而非简化算法
-      // Bug 4: panelWindow.setBounds 后 getContentSize 可能返回旧值（Windows 原生消息时序），
-      // 显式传入 width 确保 view bounds 按新宽度计算，网页渲染同步放大。
-      this.updateViewBounds(view, this.edge, width);
+      // The root content view is the authoritative child-layout coordinate space.
+      this.updateViewBounds(view, this.edge, contentWidthOverride);
     }
+
+    if (this.panelMode === 'hover') {
+      this.sticky = false;
+      this.resizeReleaseGuardPoint = this.isCursorInsideInteractiveArea(releasePoint)
+        ? null
+        : releasePoint;
+    } else {
+      this.resizeReleaseGuardPoint = null;
+    }
+
+    // Re-emitting the current state also refreshes the pinned AppBar bounds.
+    this.emitState(this.edge, this.panelMode);
 
     // Bug 14: 当前 panel 是用户自定义 panel 时，同时写入 per-panel preferredWidth，
     // 否则 applyPanelBounds 永远读取 descriptor.preferredWidth 初值，panelDefaultWidth 不起作用。
     // builtin descriptor（add-site / edit-site / site-info）不持久化 preferredWidth。
     const config = await this.configStore.read();
-    const builtinRoute = this.currentPanelId ? parseBuiltinPanelId(this.currentPanelId) : null;
+    const builtinRoute = resizedPanelId ? parseBuiltinPanelId(resizedPanelId) : null;
     const isBuiltin = builtinRoute !== null;
     const matchesUserPanel =
       !isBuiltin &&
-      this.currentPanelId != null &&
-      config.panels.some((p) => p.id === this.currentPanelId);
+      resizedPanelId != null &&
+      config.panels.some((p) => p.id === resizedPanelId);
 
     if (matchesUserPanel) {
       const nextPanels = config.panels.map((p) =>
-        p.id === this.currentPanelId ? { ...p, preferredWidth: width } : p
+        p.id === resizedPanelId ? { ...p, preferredWidth: width } : p
       );
       await this.configStore.update({ panels: nextPanels });
-    } else if (isBuiltin && this.currentPanelId) {
-      this.builtinPreferredWidths.set(this.currentPanelId, width);
-    }
-
-    // hover 模式下，拖动期间通过父容器 mousedown 设置了 sticky=true，
-    // 拖完需主动清掉，否则鼠标离开 panel 也不会触发收回。
-    // pinned 模式不依赖 sticky（scheduleHide 内有 panelMode 检查）。
-    if (this.panelMode === 'hover') {
-      this.sticky = false;
+    } else if (isBuiltin && resizedPanelId) {
+      this.builtinPreferredWidths.set(resizedPanelId, width);
     }
   }
 
@@ -577,12 +664,14 @@ export class PanelManager {
       return;
     }
 
-    // Phase 1: get or create the view (starts loading if new)
     const view = this.prepareView(descriptor, edge);
-
     const isLoading = descriptor.type === 'web' && this.webPanelHost.isViewLoading(descriptor.id);
+    if (!this.commitPresentedPanel(descriptor.id, view)) return;
 
-    // Send chromeFadeIn with loading state — renderer shows skeleton while loading
+    if (descriptor.type === 'web') {
+      this.webPanelHost.applyMuteState(descriptor.id, false);
+    }
+
     this.panelWindowRef.webContents.send(IPC_CHANNELS.chromeFadeIn, {
       descriptor,
       edge,
@@ -591,21 +680,7 @@ export class PanelManager {
       isLoading
     });
 
-    // Emit state immediately so dock icon updates without waiting for view load
     this.emitState(this.edge, this.panelMode);
-
-    if (isLoading && view) {
-      await this.waitForViewReady(view, token);
-      if (token !== this.switchToken || this.currentPanelId !== descriptor.id) {
-        return;
-      }
-    }
-
-    // Phase 2: attach view to contentView (deferred until loaded)
-    this.finishViewAttach(view, edge);
-    if (descriptor.type === 'web') {
-      this.webPanelHost.applyMuteState(descriptor.id, false);
-    }
 
     this.state = 'open';
 
@@ -614,25 +689,7 @@ export class PanelManager {
     }
   }
 
-  private waitForViewReady(view: WebContentsView, token: number, timeoutMs = 5000): Promise<void> {
-    return new Promise((resolve) => {
-      if (!view.webContents.isLoading()) {
-        resolve();
-        return;
-      }
-      const timeout = setTimeout(() => resolve(), timeoutMs);
-      const onFinish = (): void => {
-        clearTimeout(timeout);
-        resolve();
-      };
-      view.webContents.once('did-finish-load', onFinish);
-      view.webContents.once('did-fail-load', onFinish);
-    });
-  }
-
-  private prepareView(descriptor: PanelDescriptor, edge: Edge): WebContentsView | null {
-    // Remove old view immediately so React skeleton shows through while loading
-    this.setActiveView(null);
+  private prepareView(descriptor: PanelDescriptor, edge: Edge): BrowserView | null {
     if (descriptor.type !== 'web') {
       return null;
     }
@@ -640,11 +697,6 @@ export class PanelManager {
     this.updateViewBounds(view, edge);
     this.bindViewEvents(descriptor, view);
     return view;
-  }
-
-  private finishViewAttach(view: WebContentsView | null, edge: Edge): void {
-    if (!view) return;
-    this.setActiveView(view);
   }
 
   private panelMaxWidthPercent = 60;
@@ -658,18 +710,25 @@ export class PanelManager {
     this.hoverCloseDelayMs = config.behavior.hoverCloseDelayMs;
     const raw = config.layout.panelDefaultWidth;
     this.panelMaxWidthPercent = raw >= 25 && raw <= 100 ? raw : 50;
+    const display = getTargetDisplay(this.displayId);
+    this.panelWindow.setResizeLimits(display.workArea.width, this.panelMaxWidthPercent);
   }
 
   private applyPanelBounds(descriptor: PanelDescriptor, config: AppConfig): void {
     const display = getTargetDisplay(config.layout.displayId);
     const workAreaWidth = display.workArea.width;
-    const minWidthPx = Math.max(360, Math.round(workAreaWidth * 25 / 100));
-    const panelWidth = getPreferredPanelWidth(
+    const maxPercent = config.layout.panelDefaultWidth >= 25 && config.layout.panelDefaultWidth <= 100
+      ? config.layout.panelDefaultWidth
+      : 50;
+    const { min: minWidthPx } = getPanelWidthRange(workAreaWidth, maxPercent);
+    const preferredWidth = getPreferredPanelWidth(
       descriptor.preferredWidth,
       minWidthPx,
       workAreaWidth
     );
+    const panelWidth = _clampPanelWidth(preferredWidth, workAreaWidth, maxPercent);
 
+    this.panelWindow.setResizeLimits(workAreaWidth, maxPercent);
     this.panelWindow.updateBounds(config.layout.edge, panelWidth, config.layout.displayId);
     this.animationWindow.updateBounds(config.layout.edge, panelWidth, config.layout.displayId);
   }
@@ -700,9 +759,24 @@ export class PanelManager {
       return;
     }
 
-    if (this.sticky || this.panelMode === 'pinned' || this.isHideMuted()) {
+    if (this.nativeResizeActive || this.sticky || this.panelMode === 'pinned' || this.isHideMuted()) {
       this.pointerOutsideSince = null;
       return;
+    }
+
+    if (this.resizeReleaseGuardPoint) {
+      const cursor = screen.getCursorScreenPoint();
+      if (this.isCursorInsideInteractiveArea(cursor)) {
+        this.resizeReleaseGuardPoint = null;
+        this.pointerOutsideSince = null;
+        this.cancelCloseTimer();
+        return;
+      }
+      const moved =
+        Math.abs(cursor.x - this.resizeReleaseGuardPoint.x) +
+        Math.abs(cursor.y - this.resizeReleaseGuardPoint.y);
+      if (moved < RESIZE_RELEASE_MOVE_THRESHOLD) return;
+      this.resizeReleaseGuardPoint = null;
     }
 
     if (this.isCursorInsideInteractiveArea()) {
@@ -728,10 +802,14 @@ export class PanelManager {
 
   /** Force close panel when hidePanel lifecycle was interrupted */
   private forceClosePanel(): void {
+    this.cancelActiveResize();
     this.cancelCloseTimer();
     this.closeMenu();
-    if (this.currentPanelId) {
-      const view = this.webPanelHost.getView(this.currentPanelId);
+    this.lifecycleToken++;
+    this.switchToken++;
+    this.showPanelToken++;
+    if (this.presentedPanelId) {
+      const view = this.webPanelHost.getView(this.presentedPanelId);
       if (view) {
         view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
       }
@@ -742,13 +820,14 @@ export class PanelManager {
     this.stopPointerTracking();
     this.state = 'closed';
     this.currentPanelId = null;
+    this.clearPresentedPanel();
     this.sticky = false;
+    this.resizeReleaseGuardPoint = null;
     this.pendingDestroyId = null;
     this.emitState(this.edge, this.panelMode);
   }
 
-  private isCursorInsideInteractiveArea(): boolean {
-    const cursor = screen.getCursorScreenPoint();
+  private isCursorInsideInteractiveArea(cursor = screen.getCursorScreenPoint()): boolean {
     const panelBounds = this.panelWindowRef.getBounds();
     const dockBounds = getDockBounds(this.edge, this.displayId);
     const menuBrowserWindow = this.menuWindow.getBrowserWindow();
@@ -774,44 +853,56 @@ export class PanelManager {
     );
   }
 
-  private attachDescriptorView(descriptor: PanelDescriptor, edge: Edge): void {
+  private presentDescriptorView(descriptor: PanelDescriptor, edge: Edge): void {
     if (descriptor.type !== 'web') {
-      // 切到 builtin 面板时，确保 contentView 里没有任何残留的 web view，
-      // 否则它仍会以最后一次的 z-order / bounds 露出。
-      this.setActiveView(null);
+      this.commitPresentedPanel(descriptor.id, null);
       return;
     }
 
     const view = this.webPanelHost.getOrCreateView(descriptor);
-    this.setActiveView(view);
     this.updateViewBounds(view, edge);
     this.bindViewEvents(descriptor, view);
     this.webPanelHost.applyMuteState(descriptor.id, false);
+    this.commitPresentedPanel(descriptor.id, view);
   }
 
-  /**
-   * 任意时刻 panelWindow.contentView 内只保留一个目标 view（或 null）。
-   * 旧实现仅把旧 view 缩到 0×0 但不卸载，多次切换后 children 数组会累积，
-   * z-order 由历史 add 顺序决定，偶发让"应该看不见"的视图露出。
-   */
-  private setActiveView(view: WebContentsView | null): void {
-    const contentView = this.panelWindowRef.contentView;
-    for (const child of [...contentView.children]) {
-      if (child !== view) {
-        contentView.removeChildView(child);
-      }
+  private commitPresentedPanel(panelId: string, view: BrowserView | null): boolean {
+    if (this.currentPanelId !== panelId) return false;
+    if (view && (view.webContents.isDestroyed() || this.webPanelHost.getView(panelId) !== view)) {
+      return false;
     }
-    if (view && !contentView.children.includes(view)) {
-      contentView.addChildView(view);
+    if (!this.setActiveView(view)) return false;
+    this.presentedPanelId = panelId;
+    return true;
+  }
+
+  private clearPresentedPanel(): void {
+    if (this.setActiveView(null)) {
+      this.presentedPanelId = null;
+    }
+  }
+
+  /** `presentedPanelId` 只能在窗口确认唯一网页视图后提交。 */
+  private setActiveView(view: BrowserView | null): boolean {
+    try {
+      this.panelWindowRef.setBrowserView(view);
+      if (this.panelWindowRef.getBrowserView() !== view) {
+        logger.error('Panel BrowserView commit did not take effect');
+        return false;
+      }
+      return true;
+    } catch (error) {
+      logger.error('Failed to commit Panel BrowserView', error);
+      return false;
     }
   }
 
   private updateViewBounds(
-    view: WebContentsView,
+    view: BrowserView,
     edge: Edge,
     overrideContentWidth?: number
   ): void {
-    const [rawWidth, height] = this.panelWindowRef.getContentSize();
+    const { width: rawWidth, height } = this.panelWindowRef.contentView.getBounds();
     const width = overrideContentWidth != null ? overrideContentWidth : rawWidth;
     const sideInsetLeft = edge === 'right' ? CONTENT_INSET : 0;
     const sideInsetRight = edge === 'left' ? CONTENT_INSET : 0;
@@ -829,7 +920,7 @@ export class PanelManager {
     });
   }
 
-  private bindViewEvents(descriptor: PanelDescriptor, view: WebContentsView): void {
+  private bindViewEvents(descriptor: PanelDescriptor, view: BrowserView): void {
     if ((view.webContents as WebContentsWithMeta).__sidebarBound) {
       return;
     }
@@ -902,7 +993,7 @@ export class PanelManager {
     this.dockWindowRef.moveTop();
   }
 
-  private async captureViewSnapshot(view: WebContentsView | null): Promise<string | null> {
+  private async captureViewSnapshot(view: BrowserView | null): Promise<string | null> {
     if (!view || view.webContents.isDestroyed()) {
       return null;
     }
@@ -928,11 +1019,17 @@ export class PanelManager {
     panelVisible = this.state === 'open'
   ): void {
     this.emitPanelState({
-      activePanelId: this.currentPanelId,
+      activePanelId: this.presentedPanelId,
       panelVisible,
       panelMode,
       edge
     });
+  }
+
+  private sendResizeState(active: boolean): void {
+    if (!this.panelWindowRef.isDestroyed()) {
+      this.panelWindowRef.webContents.send(IPC_CHANNELS.panelResizeState, active);
+    }
   }
 
   private emitNavigation(panelId: string, url: string, canGoBack?: boolean): void {
@@ -952,82 +1049,32 @@ export class PanelManager {
   }
 
   private getDescriptor(config: AppConfig, panelId: string): PanelDescriptor | null {
-    const builtinRoute = parseBuiltinPanelId(panelId);
-    if (builtinRoute?.widgetId === 'add-site') {
-      return {
-        id: BUILTIN_ADD_SITE_ID,
-        type: 'builtin',
-        title: '添加网页',
-        iconSource: {
-          kind: 'letter',
-          fallbackLetter: '+',
-          fallbackColor: '#375a7f'
-        },
-        order: -1,
-        preferredWidth: this.builtinPreferredWidths.get(BUILTIN_ADD_SITE_ID),
-        builtin: {
-          widgetId: 'add-site'
-        }
-      };
-    }
+    return (
+      createBuiltinPanelDescriptor(panelId, this.builtinPreferredWidths.get(panelId)) ??
+      config.panels.find((panel) => panel.id === panelId) ??
+      null
+    );
+  }
 
-    if (builtinRoute?.widgetId === 'edit-site') {
-      return {
-        id: panelId,
-        type: 'builtin',
-        title: '编辑此站点',
-        iconSource: {
-          kind: 'letter',
-          fallbackLetter: 'E',
-          fallbackColor: '#5f4b8b'
-        },
-        order: -1,
-        preferredWidth: this.builtinPreferredWidths.get(panelId),
-        builtin: {
-          widgetId: 'edit-site',
-          targetPanelId: builtinRoute.targetPanelId
-        }
-      };
-    }
+  private isAutoHideBlocked(): boolean {
+    return (
+      this.nativeResizeActive ||
+      this.sticky ||
+      this.resizeReleaseGuardPoint !== null ||
+      this.panelMode === 'pinned' ||
+      this.isHideMuted() ||
+      this.isCursorInsideInteractiveArea()
+    );
+  }
 
-    if (builtinRoute?.widgetId === 'site-info') {
-      return {
-        id: panelId,
-        type: 'builtin',
-        title: '站点信息',
-        iconSource: {
-          kind: 'letter',
-          fallbackLetter: 'I',
-          fallbackColor: '#3f6f62'
-        },
-        order: -1,
-        preferredWidth: this.builtinPreferredWidths.get(panelId),
-        builtin: {
-          widgetId: 'site-info',
-          targetPanelId: builtinRoute.targetPanelId
-        }
-      };
+  private cancelActiveResize(): void {
+    if (!this.nativeResizeActive) {
+      this.panelWindow.cancelResizeBackdrop();
+      return;
     }
-
-    if (builtinRoute?.widgetId === 'settings') {
-      return {
-        id: BUILTIN_SETTINGS_ID,
-        type: 'builtin',
-        title: '设置',
-        iconSource: {
-          kind: 'letter',
-          fallbackLetter: '⚙',
-          fallbackColor: '#3a3a3a'
-        },
-        order: -1,
-        preferredWidth: this.builtinPreferredWidths.get(BUILTIN_SETTINGS_ID),
-        builtin: {
-          widgetId: 'settings'
-        }
-      };
-    }
-
-    return config.panels.find((panel) => panel.id === panelId) ?? null;
+    this.nativeResizeActive = false;
+    this.sendResizeState(false);
+    this.panelWindow.cancelResizeBackdrop();
   }
 
   private getDescriptorUrl(descriptor: PanelDescriptor): string {

@@ -8,7 +8,9 @@ import { getFaviconCachePath } from '../utils/paths';
 import { logger } from '../utils/logger';
 
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-const REQUEST_TIMEOUT_MS = 9000;
+const CACHE_KEY_VERSION = 2;
+const REQUEST_TIMEOUT_MS = 2500;
+const MAX_HTML_ICON_CANDIDATES = 4;
 const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36';
 const FALLBACK_COLORS = ['#375a7f', '#5f4b8b', '#3f6f62', '#8a5a44', '#6f5f3f'];
@@ -17,6 +19,11 @@ interface IconCandidate {
   url: string;
   source: FaviconFetchResult['source'];
   score: number;
+}
+
+interface ResolvedIcon {
+  buffer: Buffer;
+  source: FaviconFetchResult['source'];
 }
 
 export class FaviconService {
@@ -52,33 +59,25 @@ export class FaviconService {
       };
     }
 
-    const candidates = await this.buildCandidates(target);
-    for (const candidate of candidates) {
-      try {
-        const iconBuffer = await this.fetchAndNormalizeIcon(candidate.url);
-        await mkdir(getFaviconCachePath(), { recursive: true });
-        await writeFile(cachePath, iconBuffer);
+    const resolved = await this.fetchFirstSiteIcon(target);
+    if (resolved) {
+      await mkdir(getFaviconCachePath(), { recursive: true });
+      await writeFile(cachePath, resolved.buffer);
 
-        return {
-          url: normalizedUrl,
-          iconPath: cachePath,
-          dataUrl: bufferToDataUrl(iconBuffer),
-          source: candidate.source,
-          fallbackLetter,
-          fallbackColor
-        };
-      } catch (error) {
-        logger.warn(`Failed favicon candidate ${candidate.url}`, error);
-      }
+      return {
+        url: normalizedUrl,
+        iconPath: cachePath,
+        dataUrl: bufferToDataUrl(resolved.buffer),
+        source: resolved.source,
+        fallbackLetter,
+        fallbackColor
+      };
     }
 
     const fallbackBuffer = await this.createLetterIcon(fallbackLetter, fallbackColor);
-    await mkdir(getFaviconCachePath(), { recursive: true });
-    await writeFile(cachePath, fallbackBuffer);
 
     return {
       url: normalizedUrl,
-      iconPath: cachePath,
       dataUrl: bufferToDataUrl(fallbackBuffer),
       source: 'letter',
       fallbackLetter,
@@ -99,28 +98,52 @@ export class FaviconService {
     }
   }
 
-  private async buildCandidates(target: URL): Promise<IconCandidate[]> {
-    const candidates: IconCandidate[] = [];
-
-    try {
-      const html = await requestText(target.toString());
-      candidates.push(...parseIconCandidates(html, target));
-    } catch (error) {
-      logger.warn(`Failed to parse favicon html for ${target.origin}`, error);
-    }
-
-    candidates.push({
+  private async fetchFirstSiteIcon(target: URL): Promise<ResolvedIcon | null> {
+    const directCandidate: IconCandidate = {
       url: new URL('/favicon.ico', target.origin).toString(),
       source: 'favicon',
       score: 32
-    });
-    candidates.push({
-      url: `https://www.google.com/s2/favicons?domain=${encodeURIComponent(target.hostname)}&sz=128`,
-      source: 'google',
-      score: 16
+    };
+    const htmlAttempt = this.buildHtmlCandidates(target).then((candidates) => {
+      const attempts = candidates
+        .slice(0, MAX_HTML_ICON_CANDIDATES)
+        .map((candidate) => this.fetchCandidate(candidate));
+      return attempts.length > 0
+        ? Promise.any(attempts)
+        : Promise.reject(new Error('No favicon links found in HTML'));
     });
 
-    return dedupeCandidates(candidates).sort((left, right) => right.score - left.score);
+    try {
+      return await Promise.any([
+        this.fetchCandidate(directCandidate),
+        htmlAttempt
+      ]);
+    } catch {
+      return null;
+    }
+  }
+
+  private async buildHtmlCandidates(target: URL): Promise<IconCandidate[]> {
+    try {
+      const html = await requestText(target.toString());
+      return dedupeCandidates(parseIconCandidates(html, target))
+        .sort((left, right) => right.score - left.score);
+    } catch (error) {
+      logger.warn(`Failed to parse favicon html for ${target.origin}`, error);
+      return [];
+    }
+  }
+
+  private async fetchCandidate(candidate: IconCandidate): Promise<ResolvedIcon> {
+    try {
+      return {
+        buffer: await this.fetchAndNormalizeIcon(candidate.url),
+        source: candidate.source
+      };
+    } catch (error) {
+      logger.warn(`Failed favicon candidate ${candidate.url}`, error);
+      throw error;
+    }
   }
 
   private async fetchAndNormalizeIcon(iconUrl: string): Promise<Buffer> {
@@ -155,7 +178,10 @@ export class FaviconService {
   }
 
   private async getCachePath(target: URL): Promise<string> {
-    const hash = createHash('sha1').update(target.origin).digest('hex').slice(0, 12);
+    const hash = createHash('sha1')
+      .update(`${CACHE_KEY_VERSION}:${target.origin}`)
+      .digest('hex')
+      .slice(0, 12);
     const safeHost = target.hostname.replace(/[^a-z0-9.-]/gi, '_').toLowerCase();
     return join(getFaviconCachePath(), `${safeHost}-${hash}.png`);
   }

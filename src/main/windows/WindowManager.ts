@@ -1,6 +1,11 @@
 import { BrowserWindow, screen } from 'electron';
 import { IPC_CHANNELS } from '../../shared/ipc-contracts';
-import type { AppConfig, PanelState, PanelsUpdatedPayload } from '../../shared/types';
+import type {
+  AppConfig,
+  PanelResizeStartPayload,
+  PanelState,
+  PanelsUpdatedPayload
+} from '../../shared/types';
 import type { ConfigStore } from '../store/ConfigStore';
 import { PanelManager } from '../panels/PanelManager';
 import { AppBarService } from '../services/AppBarService';
@@ -11,6 +16,7 @@ import { PanelAnimationWindow } from './PanelAnimationWindow';
 import { DockWindow } from './DockWindow';
 import { PanelMenuWindow } from './PanelMenuWindow';
 import { PanelWindow } from './PanelWindow';
+import { DockGeometryStabilizer } from './dockGeometryStabilizer';
 
 const DOCK_APPBAR_ID = 'dock';
 const PANEL_APPBAR_ID = 'panel';
@@ -53,6 +59,7 @@ export class WindowManager {
   private panelMenuWindow: PanelMenuWindow | null = null;
   private panelManager: PanelManager | null = null;
   private readonly appBarService = new AppBarService();
+  private readonly dockGeometryStabilizer = new DockGeometryStabilizer();
 
   /** 隐藏锚点窗口——仅用于 AppBar 注册，绝不显示 */
   private dockAnchor: BrowserWindow | null = null;
@@ -89,6 +96,7 @@ export class WindowManager {
     this.panelMenuWindow = new PanelMenuWindow();
 
     this.dockWindow.create();
+    this.hookExplorerRestart();
     this.panelWindow.create();
     this.panelAnimationWindow.create();
     this.panelMenuWindow.create();
@@ -105,11 +113,17 @@ export class WindowManager {
       this.panelManager?.handlePanelBlur();
     });
 
-    if (this.config.app.autoShowDock) {
-      this.registerDockAppBar();
-      this.dockWindow?.show();
-    }
     this.lastPanelState = { ...this.lastPanelState, edge: this.config.layout.edge };
+    if (this.config.app.autoShowDock) {
+      const transition = this.dockWindow.beginGeometryTransition();
+      this.dockWindow.show();
+      this.registerDockAppBar();
+      this.stabilizeDockGeometry(
+        transition,
+        this.config.layout.edge,
+        this.config.layout.displayId
+      );
+    }
   }
 
   getDockWindow(): DockWindow | null {
@@ -157,15 +171,15 @@ export class WindowManager {
     const edge = config.layout.edge;
     const displayId = config.layout.displayId ??
       screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).id;
+    const transition = this.dockWindow?.beginGeometryTransition();
     this.config = config;
     // Persist auto-detected displayId so registerDockAppBar uses the correct monitor
     this.config.layout.displayId = displayId;
     this.panelManager?.forceCloseAndResetMode(edge, displayId);
-    // 先把新 edge 推送给 renderer，确保 dockWillShow 动画方向正确
     this.lastPanelState = { ...this.lastPanelState, edge, panelMode: 'hover', activePanelId: null };
     this.forwardPanelState(this.lastPanelState);
     this.dockWindow?.updateConfig(config);
-    this.dockWindow?.reposition(edge, displayId);
+    this.dockWindow?.updateBounds(edge, displayId);
     const maxWidthPx = percentToPanelPx(
       config.layout.panelDefaultWidth,
       getTargetDisplay(displayId).workArea.width
@@ -174,8 +188,11 @@ export class WindowManager {
     this.panelWindow?.updateBounds(edge, maxWidthPx, displayId);
     this.panelAnimationWindow?.updateConfig(config);
     this.panelAnimationWindow?.updateBounds(edge, maxWidthPx, displayId);
-    this.unregisterAllAppBars();
+    this.unregisterPanelAppBar();
     this.registerDockAppBar();
+    if (transition !== undefined) {
+      this.stabilizeDockGeometry(transition, edge, displayId);
+    }
   }
 
   toggleDockVisibility(): boolean {
@@ -278,6 +295,14 @@ export class WindowManager {
     this.panelManager?.destroyPanelView(panelId);
   }
 
+  async clearAllWebStorageData(): Promise<void> {
+    await this.panelManager?.clearAllWebStorageData();
+  }
+
+  async flushWebPanelCookies(): Promise<void> {
+    await this.panelManager?.flushWebPanelCookies();
+  }
+
   async togglePanelPin(): Promise<void> {
     await this.panelManager?.togglePin();
   }
@@ -297,21 +322,15 @@ export class WindowManager {
     }
   }
 
-  async commitPanelResize(width: number): Promise<void> {
-    await this.panelManager?.commitResize(width);
-    if (this.lastPanelState.panelMode === 'pinned') {
-      void this.syncPanelAppBar(this.lastPanelState);
-    }
-  }
-
-  resizeDragPanel(width: number): void {
-    this.panelManager?.resizeDrag(width);
+  startPanelResize(point: PanelResizeStartPayload): void {
+    this.panelManager?.startNativeResize(point);
   }
 
   async reloadAfterImport(nextConfig: AppConfig): Promise<void> {
+    this.dockGeometryStabilizer.cancel();
     this.unregisterAllAppBars();
     this.dockWindow?.getBrowserWindow()?.destroy();
-    this.panelWindow?.getBrowserWindow()?.destroy();
+    this.panelWindow?.destroy();
     this.panelAnimationWindow?.getBrowserWindow()?.destroy();
     this.panelMenuWindow?.getBrowserWindow()?.destroy();
     this.dockWindow = null;
@@ -324,6 +343,7 @@ export class WindowManager {
   }
 
   disposeAppBar(): void {
+    this.dockGeometryStabilizer.cancel();
     // 仅调用 ABM_REMOVE，不销毁锚点窗口。
     // Windows 的 SHAppBarMessage(ABM_REMOVE) 需要窗口存活才能完成
     // work area 恢复消息投递——立即 destroy 会导致 WM_SETTINGCHANGE
@@ -334,7 +354,7 @@ export class WindowManager {
 
   // ---------- AppBar（全部通过隐藏锚点实现）----------
 
-  /** 创建隐藏锚点并注册为 dock AppBar */
+  /** 创建或复用隐藏锚点并注册为 dock AppBar。 */
   private registerDockAppBar(): void {
     if (!this.appBarService.isAvailable()) return;
     const dockDip = getDockBounds(this.lastPanelState.edge, this.config.layout.displayId);
@@ -343,10 +363,11 @@ export class WindowManager {
     const refWin = this.dockWindow?.getBrowserWindow();
     if (!refWin) return;
 
-    if (this.dockAnchor && !this.dockAnchor.isDestroyed()) {
-      this.dockAnchor.destroy();
+    if (!this.dockAnchor || this.dockAnchor.isDestroyed()) {
+      this.dockAnchor = createAppBarAnchor(dockDip);
+    } else {
+      this.dockAnchor.setBounds(dockDip);
     }
-    this.dockAnchor = createAppBarAnchor(dockDip);
 
     const physical = screen.dipToScreenRect(refWin, dockDip);
     const handle = this.dockAnchor.getNativeWindowHandle();
@@ -362,12 +383,47 @@ export class WindowManager {
     if (dockWin && !dockWin.isDestroyed()) {
       dockWin.setBounds(dockDip);
     }
+  }
 
-    // Windows 异步处理 work area 变更后可能推送 always-on-top 窗口。
-    // 延迟断言确保 dock 不被推偏。
-    setTimeout(() => this.assertAllVisibleWindows(true), 80);
-    setTimeout(() => this.assertAllVisibleWindows(true), 250);
-    setTimeout(() => this.assertAllVisibleWindows(true), 600);
+  private stabilizeDockGeometry(
+    transition: number,
+    edge: AppConfig['layout']['edge'],
+    displayId?: number
+  ): void {
+    const dockWindow = this.dockWindow;
+    if (!dockWindow) return;
+
+    this.dockGeometryStabilizer.start({
+      isAtExpectedBounds: () => dockWindow.isAtBounds(edge, displayId),
+      applyExpectedBounds: () => dockWindow.updateBounds(edge, displayId),
+      finish: () => {
+        if (dockWindow.finishGeometryTransition(transition)) {
+          logger.info('Dock geometry transition finished', { edge, displayId });
+        }
+      }
+    });
+  }
+
+  private hookExplorerRestart(): void {
+    const message = this.appBarService.getTaskbarCreatedMessage();
+    const dockBrowserWindow = this.dockWindow?.getBrowserWindow();
+    if (!message || !dockBrowserWindow) return;
+
+    dockBrowserWindow.hookWindowMessage(message, () => {
+      const restoreDockAppBar = this.appBarService.isRegistered(DOCK_APPBAR_ID);
+      this.appBarService.forgetRegistrations();
+      if (!restoreDockAppBar) return;
+
+      logger.info('Explorer restarted; restoring Dock AppBar');
+      const edge = this.config.layout.edge;
+      const displayId = this.config.layout.displayId;
+      const transition = this.dockWindow?.beginGeometryTransition();
+      this.dockWindow?.updateBounds(edge, displayId);
+      this.registerDockAppBar();
+      if (transition !== undefined) {
+        this.stabilizeDockGeometry(transition, edge, displayId);
+      }
+    });
   }
 
   /** panel 不再独立注册 AppBar——仅需确保窗口位置正确 */
@@ -381,15 +437,7 @@ export class WindowManager {
     }
   }
 
-  /**
-   * 把所有可见窗口钉回正确位置。
-   * 当 work area 变化（WM_SETTINGCHANGE）后 Windows 可能把
-   * always-on-top 窗口推入新 work area。此方法在 display-metrics-changed
-   * 事件和 AppBar 注册后同步/延迟调用，确保窗口始终贴屏边。
-   *
-   * @param force 跳过 work area 缓存检查——AppBar 注册后的延迟断言需要此参数，
-   *   因为 Windows 可能在 work area 变更之后才异步推送 always-on-top 窗口。
-   */
+  /** 校准 Dock 与当前可见面板的位置。 */
   private assertAllVisibleWindows(force = false): void {
     const now = Date.now();
     if (now - this.lastAssertAllMs < 80) return;
