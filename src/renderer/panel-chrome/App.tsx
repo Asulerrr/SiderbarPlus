@@ -331,6 +331,18 @@ export default function App(): JSX.Element {
     await hydrateBuiltinPanel(payload.descriptor, nextConfig, token);
   };
 
+  const activatePanelLoadingState = (panelId: string, isLoading: boolean): void => {
+    panelIdRef.current = panelId;
+    if (loadingTimerRef.current) {
+      clearTimeout(loadingTimerRef.current);
+      loadingTimerRef.current = null;
+    }
+    setLoadingVisible(isLoading);
+    setLoadingWidth(isLoading ? 32 : 0);
+    setLoadingDone(false);
+    setIsViewLoading(isLoading);
+  };
+
   useEffect(() => {
     let mounted = true;
 
@@ -349,6 +361,7 @@ export default function App(): JSX.Element {
     });
 
     const disposeAnimateIn = window.panelAPI.onAnimateIn((payload) => {
+      activatePanelLoadingState(payload.panelId, false);
       void applyPayload(payload);
       setFading(false);
       setContentSnapshotDataUrl(payload.snapshotDataUrl ?? null);
@@ -375,9 +388,9 @@ export default function App(): JSX.Element {
     });
 
     const disposeFadeIn = window.panelAPI.onChromeFadeIn((payload) => {
+      activatePanelLoadingState(payload.descriptor.id, payload.isLoading ?? false);
       void applyPayload(payload);
       setFading(false);
-      setIsViewLoading(payload.isLoading ?? false);
     });
 
     const disposeNavigation = window.panelAPI.onNavigationState((payload: PanelNavigationPayload) => {
@@ -391,22 +404,26 @@ export default function App(): JSX.Element {
     const disposeLoading = window.panelAPI.onLoadingState((payload) => {
       if (payload.panelId !== panelIdRef.current) return;
 
+      if (loadingTimerRef.current) {
+        clearTimeout(loadingTimerRef.current);
+        loadingTimerRef.current = null;
+      }
+
       if (payload.isLoading) {
-        if (loadingTimerRef.current) clearTimeout(loadingTimerRef.current);
+        setIsViewLoading(true);
         setLoadingDone(false);
         setLoadingVisible(true);
-        setLoadingWidth(70);
+        setLoadingWidth(32);
       } else {
         setIsViewLoading(false);
         setLoadingWidth(100);
+        setLoadingDone(true);
         loadingTimerRef.current = setTimeout(() => {
-          setLoadingDone(true);
-          loadingTimerRef.current = setTimeout(() => {
-            setLoadingVisible(false);
-            setLoadingWidth(0);
-            setLoadingDone(false);
-          }, 200);
-        }, 100);
+          setLoadingVisible(false);
+          setLoadingWidth(0);
+          setLoadingDone(false);
+          loadingTimerRef.current = null;
+        }, 200);
       }
     });
 
@@ -444,14 +461,6 @@ export default function App(): JSX.Element {
   // 面板切换时清除残留的加载进度条 timer
   useEffect(() => {
     panelIdRef.current = chromeState.panelId;
-    if (loadingTimerRef.current) {
-      clearTimeout(loadingTimerRef.current);
-      loadingTimerRef.current = null;
-    }
-    setLoadingVisible(false);
-    setLoadingWidth(0);
-    setLoadingDone(false);
-    setIsViewLoading(false);
   }, [chromeState.panelId]);
 
   useEffect(() => {
@@ -693,7 +702,7 @@ export default function App(): JSX.Element {
           }}
         >
           <div
-            className={`flex h-[76px] shrink-0 items-center justify-between px-4 transition-opacity duration-100 ${
+            className={`relative flex h-[76px] shrink-0 items-center justify-between px-4 transition-opacity duration-100 ${
               fading ? 'opacity-0' : 'opacity-100'
             }`}
           >
@@ -723,13 +732,13 @@ export default function App(): JSX.Element {
               panelMode={chromeState.panelMode}
               edge={chromeState.edge}
             />
+            {loadingVisible ? (
+              <div
+                className={`loading-bar${loadingDone ? ' loading-bar--done' : ''}`}
+                style={{ width: `${loadingWidth}%` }}
+              />
+            ) : null}
           </div>
-          {loadingVisible ? (
-            <div
-              className={`loading-bar${loadingDone ? ' loading-bar--done' : ''}`}
-              style={{ width: `${loadingWidth}%` }}
-            />
-          ) : null}
           <div className="relative flex-1 overflow-hidden bg-[#242424]">
             {isSiteFormPanel ? (
               <div className="absolute inset-0 flex flex-col" style={{ backgroundColor: colors.innerBg, color: colors.text }}>

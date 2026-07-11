@@ -12,6 +12,7 @@ import type {
 } from '../../shared/types';
 import { BrowserService } from '../services/BrowserService';
 import { logger } from '../utils/logger';
+import { buildNavigationFailurePageUrl } from './navigationFailurePage';
 import { SHARED_PARTITION, resolvePanelPartition } from './panelSessionPartition';
 import { WebPanelSessionManager } from './WebPanelSessionManager';
 
@@ -30,7 +31,14 @@ interface ViewMeta {
   defaultUserAgent: string;
 }
 
+interface NavigationFailureState {
+  attemptedUrl: string;
+  errorPageUrl: string;
+}
+
 const MAX_CACHED_VIEWS = 8;
+const NAVIGATION_TIMEOUT_MS = 15_000;
+const NAVIGATION_TIMEOUT_ERROR_CODE = -118;
 
 export class WebPanelHost {
   private readonly views = new Map<string, BrowserView>();
@@ -42,6 +50,8 @@ export class WebPanelHost {
   private readonly sessionManager = new WebPanelSessionManager(() => this.currentConfig);
   private currentConfig: AppConfig | null = null;
   private readonly panelUrls = new Map<string, string>();
+  private readonly navigationFailures = new Map<string, NavigationFailureState>();
+  private readonly navigationTimeouts = new Map<string, NodeJS.Timeout>();
   private readonly translatePanelIds = new Set<string>();
   private readonly popupParentMap = new Map<number, string>(); // popup wcId → parent panelId
 
@@ -567,6 +577,8 @@ export class WebPanelHost {
     this.meta.delete(panelId);
     this.partitions.delete(panelId);
     this.panelUrls.delete(panelId);
+    this.navigationFailures.delete(panelId);
+    this.clearNavigationTimeout(panelId);
     const idx = this.lruOrder.indexOf(panelId);
     if (idx !== -1) this.lruOrder.splice(idx, 1);
   }
@@ -618,7 +630,18 @@ export class WebPanelHost {
   }
 
   private bindViewEvents(panelId: string, view: BrowserView): void {
+    view.webContents.on(
+      'did-start-navigation',
+      (_event, url, isInPlace, isMainFrame) => {
+        if (!isMainFrame || isInPlace || url.startsWith('data:')) return;
+        this.navigationFailures.delete(panelId);
+        this.dependencies.emitLoading({ panelId, isLoading: true });
+        this.startNavigationTimeout(panelId, view, url);
+      }
+    );
+
     view.webContents.on('did-navigate', (_event, url) => {
+      this.clearNavigationTimeout(panelId);
       this.emitNavigationState(panelId, view, url);
     });
     view.webContents.on('did-navigate-in-page', (_event, url, isMainFrame) => {
@@ -628,10 +651,27 @@ export class WebPanelHost {
     });
 
     view.webContents.on('did-finish-load', () => {
+      this.clearNavigationTimeout(panelId);
       this.emitNavigationState(panelId, view);
     });
 
+    view.webContents.on(
+      'did-fail-load',
+      (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+        if (errorCode === -3 || !isMainFrame) return;
+        this.clearNavigationTimeout(panelId);
+        this.showNavigationFailure(
+          panelId,
+          view,
+          validatedURL,
+          errorCode,
+          errorDescription
+        );
+      }
+    );
+
     view.webContents.on('did-start-loading', () => {
+      if (this.navigationFailures.has(panelId)) return;
       this.dependencies.emitLoading({ panelId, isLoading: true });
     });
 
@@ -651,9 +691,18 @@ export class WebPanelHost {
       }
 
       try {
+        const currentUrl = url || view.webContents.getURL();
+        const failure = this.navigationFailures.get(panelId);
+        const displayUrl =
+          failure && currentUrl === failure.errorPageUrl
+            ? failure.attemptedUrl
+            : currentUrl;
+        if (failure && currentUrl && currentUrl !== failure.errorPageUrl) {
+          this.navigationFailures.delete(panelId);
+        }
         this.dependencies.emitNavigation({
           panelId,
-          url: url || view.webContents.getURL(),
+          url: displayUrl,
           canGoBack: view.webContents.canGoBack()
         });
       } catch {
@@ -663,6 +712,78 @@ export class WebPanelHost {
 
     emit();
     setTimeout(emit, 80);
+  }
+
+  private showNavigationFailure(
+    panelId: string,
+    view: BrowserView,
+    validatedUrl: string,
+    errorCode: number,
+    errorDescription: string
+  ): void {
+    if (view.webContents.isDestroyed()) return;
+    this.clearNavigationTimeout(panelId);
+    const attemptedUrl =
+      validatedUrl ||
+      this.panelUrls.get(panelId) ||
+      view.webContents.getURL();
+    if (!attemptedUrl || attemptedUrl.startsWith('data:')) return;
+
+    const errorPageUrl = buildNavigationFailurePageUrl({
+      attemptedUrl,
+      fallbackUrl: this.panelUrls.get(panelId) || attemptedUrl,
+      errorDescription
+    });
+    this.navigationFailures.set(panelId, { attemptedUrl, errorPageUrl });
+    logger.warn('Panel navigation failed', {
+      panelId,
+      attemptedUrl,
+      errorCode,
+      errorDescription
+    });
+    this.dependencies.emitLoading({ panelId, isLoading: false });
+    this.dependencies.emitNavigation({
+      panelId,
+      url: attemptedUrl,
+      canGoBack: view.webContents.canGoBack()
+    });
+    void view.webContents.loadURL(errorPageUrl).catch((error) => {
+      logger.error('Failed to show panel navigation error page', error);
+    });
+  }
+
+  private startNavigationTimeout(
+    panelId: string,
+    view: BrowserView,
+    attemptedUrl: string
+  ): void {
+    this.clearNavigationTimeout(panelId);
+    const timeout = setTimeout(() => {
+      this.navigationTimeouts.delete(panelId);
+      if (view.webContents.isDestroyed()) return;
+      logger.warn('Panel navigation timed out', {
+        panelId,
+        attemptedUrl,
+        timeoutMs: NAVIGATION_TIMEOUT_MS
+      });
+      view.webContents.stop();
+      this.showNavigationFailure(
+        panelId,
+        view,
+        attemptedUrl,
+        NAVIGATION_TIMEOUT_ERROR_CODE,
+        'ERR_CONNECTION_TIMED_OUT'
+      );
+    }, NAVIGATION_TIMEOUT_MS);
+    timeout.unref();
+    this.navigationTimeouts.set(panelId, timeout);
+  }
+
+  private clearNavigationTimeout(panelId: string): void {
+    const timeout = this.navigationTimeouts.get(panelId);
+    if (!timeout) return;
+    clearTimeout(timeout);
+    this.navigationTimeouts.delete(panelId);
   }
 
   private applyViewPreferences(

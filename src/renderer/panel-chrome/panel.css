@@ -132,18 +132,27 @@ input[type='range'].slider-accent::-moz-range-thumb {
   background: rgba(255, 255, 255, 0.22);
 }
 
-/* 面板加载进度条 — 位于标题栏与网页区接缝处 */
+/* Keep the indicator inside native BrowserView's top boundary so it stays visible. */
 .loading-bar {
-  position: relative;
-  flex-shrink: 0;
+  position: absolute;
+  left: 0;
+  bottom: 0;
   height: 2px;
   background: #4abff6;
-  transition: width 1.5s ease-out, opacity 0.2s ease;
+  animation: loading-bar-indeterminate 1.15s ease-in-out infinite;
+  transition: opacity 0.2s ease;
   z-index: 200;
   pointer-events: none;
 }
 .loading-bar.loading-bar--done {
+  animation: none;
+  transform: none;
   opacity: 0;
+}
+@keyframes loading-bar-indeterminate {
+  0% { transform: translateX(-115%); }
+  55% { transform: translateX(120%); }
+  100% { transform: translateX(315%); }
 }
 
 /* Loading skeleton for deferred view attachment */

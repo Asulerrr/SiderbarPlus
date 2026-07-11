@@ -3,7 +3,10 @@ import { join } from 'node:path';
 import { parseHex8, resolveSurfaceColors } from '../../shared/theme';
 import type { AppConfig } from '../../shared/types';
 import { getPanelWidthRange } from '../panels/panelResize';
-import { startNativeWindowResize } from '../services/NativeWindowResize';
+import {
+  disableNativeWindowShadow,
+  startNativeWindowResize
+} from '../services/NativeWindowResize';
 import { getDockBounds, getTargetDisplay } from '../utils/display';
 import {
   type WindowBounds,
@@ -89,6 +92,7 @@ export class PanelWindow {
       }
     });
 
+    disableNativeWindowShadow(this.window.getNativeWindowHandle());
     this.window.setIgnoreMouseEvents(true, { forward: true });
     this.window.setAlwaysOnTop(true, 'floating');
     this.window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });

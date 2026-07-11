@@ -28,6 +28,7 @@ import {
   clampPanelWidth as _clampPanelWidth,
   getPanelWidthRange
 } from './panelResize.ts';
+import { isPointInResizeIntentCorridor } from './resizeIntent';
 
 const CHROME_HEIGHT = 76;
 const OPEN_ANIMATION_MS = 340;
@@ -42,6 +43,8 @@ const PANEL_BORDER_WIDTH = 1;
 const POINTER_TRACK_INTERVAL_MS = 80;
 const POINTER_TRACK_MARGIN = 3;
 const RESIZE_RELEASE_MOVE_THRESHOLD = 12;
+const RESIZE_INTENT_MARGIN = 14;
+const RESIZE_INTENT_HOLD_MS = 450;
 
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => {
@@ -64,6 +67,7 @@ export class PanelManager {
   private closeTimer: NodeJS.Timeout | null = null;
   private pointerTracker: NodeJS.Timeout | null = null;
   private pointerOutsideSince: number | null = null;
+  private hideRequestToken = 0;
   private lifecycleToken = 0;
   private switchToken = 0;
   private showPanelToken = 0;
@@ -81,6 +85,7 @@ export class PanelManager {
   private hoverCloseDelayMs = 300;
   private pendingDestroyId: string | null = null;
   private resizeReleaseGuardPoint: Electron.Point | null = null;
+  private resizeIntentUntilMs = 0;
   private nativeResizeActive = false;
   private readonly snapshots = new Map<string, string>();
   private readonly createdAt = Date.now();
@@ -293,7 +298,9 @@ export class PanelManager {
 
   scheduleHide(destroy = false): void {
     this.cancelCloseTimer();
+    const requestToken = this.hideRequestToken;
     void this.configStore.read().then((config) => {
+      if (requestToken !== this.hideRequestToken) return;
       void this.webPanelHost.refreshConfig();
       this.applyHoverConfig(config);
       if (this.isAutoHideBlocked()) return;
@@ -302,6 +309,7 @@ export class PanelManager {
       this.pointerOutsideSince = Date.now();
       this.closeTimer = setTimeout(() => {
         this.closeTimer = null;
+        if (requestToken !== this.hideRequestToken) return;
         if (this.isAutoHideBlocked()) return;
         void this.hidePanel(destroy);
       }, config.behavior.hoverCloseDelayMs);
@@ -605,6 +613,7 @@ export class PanelManager {
     if (this.nativeResizeActive) return;
     this.nativeResizeActive = true;
     this.resizeReleaseGuardPoint = null;
+    this.resizeIntentUntilMs = 0;
     this.cancelCloseTimer();
     this.pointerOutsideSince = null;
     this.sendResizeState(true);
@@ -613,6 +622,7 @@ export class PanelManager {
   private finishNativeResize(): void {
     if (!this.nativeResizeActive) return;
     this.nativeResizeActive = false;
+    this.resizeIntentUntilMs = Date.now() + RESIZE_INTENT_HOLD_MS;
     const width = this.panelWindowRef.getBounds().width;
     this.panelWindow.rememberNativeWidth(this.edge, width);
     const releasePoint = screen.getCursorScreenPoint();
@@ -813,6 +823,7 @@ export class PanelManager {
     }
 
     this.pointerOutsideSince = null;
+    this.resizeIntentUntilMs = 0;
     this.pointerTracker = setInterval(() => {
       this.checkPointerLocation();
     }, POINTER_TRACK_INTERVAL_MS);
@@ -825,6 +836,7 @@ export class PanelManager {
     }
 
     this.pointerOutsideSince = null;
+    this.resizeIntentUntilMs = 0;
   }
 
   private checkPointerLocation(): void {
@@ -843,8 +855,14 @@ export class PanelManager {
       return;
     }
 
+    const cursor = screen.getCursorScreenPoint();
+    if (this.isResizeIntentProtected(cursor)) {
+      this.pointerOutsideSince = null;
+      this.cancelCloseTimer();
+      return;
+    }
+
     if (this.resizeReleaseGuardPoint) {
-      const cursor = screen.getCursorScreenPoint();
       if (this.isCursorInsideInteractiveArea(cursor)) {
         this.resizeReleaseGuardPoint = null;
         this.pointerOutsideSince = null;
@@ -936,6 +954,24 @@ export class PanelManager {
       point.y >= bounds.y - POINTER_TRACK_MARGIN &&
       point.y <= bounds.y + bounds.height + POINTER_TRACK_MARGIN
     );
+  }
+
+  private isResizeIntentProtected(
+    cursor = screen.getCursorScreenPoint()
+  ): boolean {
+    const now = Date.now();
+    if (
+      isPointInResizeIntentCorridor(
+        cursor,
+        this.panelWindowRef.getBounds(),
+        this.edge,
+        RESIZE_INTENT_MARGIN
+      )
+    ) {
+      this.resizeIntentUntilMs = now + RESIZE_INTENT_HOLD_MS;
+      return true;
+    }
+    return now < this.resizeIntentUntilMs;
   }
 
   private presentDescriptorView(descriptor: PanelDescriptor, edge: Edge): void {
@@ -1195,6 +1231,7 @@ export class PanelManager {
       this.resizeReleaseGuardPoint !== null ||
       this.panelMode === 'pinned' ||
       this.isHideMuted() ||
+      this.isResizeIntentProtected() ||
       this.isCursorInsideInteractiveArea()
     );
   }
@@ -1202,6 +1239,7 @@ export class PanelManager {
   private cancelActiveResize(): void {
     if (!this.nativeResizeActive) return;
     this.nativeResizeActive = false;
+    this.resizeIntentUntilMs = Date.now() + RESIZE_INTENT_HOLD_MS;
     this.sendResizeState(false);
   }
 
@@ -1210,6 +1248,7 @@ export class PanelManager {
   }
 
   private cancelCloseTimer(): void {
+    this.hideRequestToken++;
     if (this.closeTimer) {
       clearTimeout(this.closeTimer);
       this.closeTimer = null;

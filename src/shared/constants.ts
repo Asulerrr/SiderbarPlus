@@ -4,7 +4,8 @@ import { DEFAULT_ICONS } from './defaultIcons.ts';
 export const APP_ID = 'com.sidebar.app';
 export const APP_NAME = 'SideBar';
 export const DOCK_WIDTH = 44;
-export const PANEL_DEFAULT_WIDTH = 50; // 屏幕宽度的百分比（30-100）
+export const PANEL_INITIAL_WIDTH_PERCENT = 25;
+export const PANEL_DEFAULT_WIDTH = 50; // Maximum width as a percentage of the work area.
 export const DOCK_BACKGROUND = '#323232';
 export const DOCK_DEFAULT_OPACITY = 30;
 export const BUILTIN_ADD_SITE_ID = 'builtin:add-site';
@@ -62,7 +63,7 @@ const buildDefaultPanels = () =>
       fallbackColor: panel.fallbackColor
     },
     order,
-    preferredWidth: PANEL_DEFAULT_WIDTH,
+    preferredWidth: PANEL_INITIAL_WIDTH_PERCENT,
     web: {
       url: panel.url,
       openInBrowser: 'system',

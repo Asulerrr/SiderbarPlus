@@ -32,7 +32,7 @@ export interface PanelDescriptor {
   title: string;
   iconSource: IconSource;
   order: number;
-  preferredWidth: number;
+  preferredWidth?: number;
   web?: WebPanelConfig;
   builtin?: BuiltinPanelConfig;
 }
@@ -176,7 +176,7 @@ export interface PanelCreatePayload {
   type: 'web';
   title: string;
   iconSource: IconSource;
-  preferredWidth: number;
+  preferredWidth?: number;
   web: WebPanelConfig;
 }
 

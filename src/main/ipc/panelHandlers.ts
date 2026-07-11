@@ -2,6 +2,7 @@ import { Menu, dialog, ipcMain } from 'electron';
 import { copyFile, mkdir } from 'node:fs/promises';
 import { extname, join, resolve } from 'node:path';
 import { nanoid } from 'nanoid';
+import { PANEL_INITIAL_WIDTH_PERCENT } from '../../shared/constants';
 import { IPC_CHANNELS } from '../../shared/ipc-contracts';
 import type {
   IpcResult,
@@ -135,7 +136,8 @@ export const registerPanelHandlers = (
           type: payload.type,
           title: payload.title.trim(),
           iconSource,
-          preferredWidth: payload.preferredWidth,
+          preferredWidth:
+            payload.preferredWidth ?? PANEL_INITIAL_WIDTH_PERCENT,
           web: payload.web,
           order: config.panels.length
         };

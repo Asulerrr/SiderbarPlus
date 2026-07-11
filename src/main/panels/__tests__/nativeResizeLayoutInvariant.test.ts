@@ -84,6 +84,21 @@ test('native resize pins the cursor to the actual window edge', async () => {
   assert.doesNotMatch(nativeResize, /GetCursorPos/);
 });
 
+test('resize intent blocks auto-hide and stale asynchronous hide requests', async () => {
+  const source = await readFile(join(testDir, '../PanelManager.ts'), 'utf8');
+
+  assert.match(source, /const RESIZE_INTENT_MARGIN = 14/);
+  assert.match(source, /const RESIZE_INTENT_HOLD_MS = 450/);
+  assert.match(source, /this\.isResizeIntentProtected\(cursor\)/);
+  assert.match(source, /this\.isResizeIntentProtected\(\)/);
+  assert.match(source, /const requestToken = this\.hideRequestToken/);
+  assert.match(
+    source,
+    /if \(requestToken !== this\.hideRequestToken\) return;/
+  );
+  assert.match(source, /this\.hideRequestToken\+\+/);
+});
+
 test('native resize uses one opaque panel surface without a follower window', async () => {
   const panelWindow = await readFile(
     join(testDir, '../../windows/PanelWindow.ts'),
@@ -97,6 +112,10 @@ test('native resize uses one opaque panel surface without a follower window', as
     join(testDir, '../../ipc/configHandlers.ts'),
     'utf8'
   );
+  const nativeResize = await readFile(
+    join(testDir, '../../services/NativeWindowResize.ts'),
+    'utf8'
+  );
 
   assert.match(panelWindow, /transparent: false/);
   assert.match(
@@ -104,6 +123,13 @@ test('native resize uses one opaque panel surface without a follower window', as
     /backgroundColor: getPanelBackgroundColor\(this\.config\)/
   );
   assert.match(panelWindow, /backgroundThrottling: false/);
+  assert.match(
+    panelWindow,
+    /disableNativeWindowShadow\(this\.window\.getNativeWindowHandle\(\)\)/
+  );
+  assert.match(nativeResize, /DwmSetWindowAttribute/);
+  assert.match(nativeResize, /DWMWA_NCRENDERING_POLICY/);
+  assert.match(nativeResize, /DWMNCRP_DISABLED/);
   assert.doesNotMatch(panelWindow, /resizeBackdrop|setOpacity/);
   assert.doesNotMatch(panelManager, /setOpacity/);
   assert.match(panelWindow, /resolveSurfaceColors\(config\.appearance, true\)/);

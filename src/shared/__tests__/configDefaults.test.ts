@@ -1,6 +1,10 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_CONFIG, PANEL_DEFAULT_WIDTH } from '../constants.ts';
+import {
+  DEFAULT_CONFIG,
+  PANEL_DEFAULT_WIDTH,
+  PANEL_INITIAL_WIDTH_PERCENT
+} from '../constants.ts';
 
 describe('DEFAULT_CONFIG', () => {
   it('includes appearance with transparent theme and dark default custom color', () => {
@@ -11,6 +15,8 @@ describe('DEFAULT_CONFIG', () => {
 
   it('includes locally-iconed starter sites for a fresh install', () => {
     const config = DEFAULT_CONFIG();
+
+    assert.equal(config.layout.panelDefaultWidth, PANEL_DEFAULT_WIDTH);
 
     assert.deepEqual(
       config.panels.map(
@@ -29,7 +35,7 @@ describe('DEFAULT_CONFIG', () => {
           id: 'dev-bilibili',
           title: '哔哩哔哩',
           order: 0,
-          preferredWidth: PANEL_DEFAULT_WIDTH,
+          preferredWidth: PANEL_INITIAL_WIDTH_PERCENT,
           url: 'https://www.bilibili.com',
           iconKind: 'auto',
           hasLocalIcon: true
@@ -38,7 +44,7 @@ describe('DEFAULT_CONFIG', () => {
           id: 'dev-xiaohongshu',
           title: '小红书',
           order: 1,
-          preferredWidth: PANEL_DEFAULT_WIDTH,
+          preferredWidth: PANEL_INITIAL_WIDTH_PERCENT,
           url: 'https://www.xiaohongshu.com',
           iconKind: 'auto',
           hasLocalIcon: true
@@ -47,7 +53,7 @@ describe('DEFAULT_CONFIG', () => {
           id: 'dev-doubao',
           title: '豆包',
           order: 2,
-          preferredWidth: PANEL_DEFAULT_WIDTH,
+          preferredWidth: PANEL_INITIAL_WIDTH_PERCENT,
           url: 'https://www.doubao.com',
           iconKind: 'auto',
           hasLocalIcon: true
@@ -56,7 +62,7 @@ describe('DEFAULT_CONFIG', () => {
           id: 'dev-claude',
           title: 'Claude',
           order: 3,
-          preferredWidth: PANEL_DEFAULT_WIDTH,
+          preferredWidth: PANEL_INITIAL_WIDTH_PERCENT,
           url: 'https://claude.ai',
           iconKind: 'auto',
           hasLocalIcon: true
@@ -65,7 +71,7 @@ describe('DEFAULT_CONFIG', () => {
           id: 'dev-google',
           title: 'Google',
           order: 4,
-          preferredWidth: PANEL_DEFAULT_WIDTH,
+          preferredWidth: PANEL_INITIAL_WIDTH_PERCENT,
           url: 'https://www.google.com',
           iconKind: 'auto',
           hasLocalIcon: true
