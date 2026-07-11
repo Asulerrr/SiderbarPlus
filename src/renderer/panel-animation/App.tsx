@@ -127,7 +127,7 @@ export default function App(): JSX.Element {
         style={{ transform, transition, backgroundColor: surface.bg }}
       >
         <div
-          className={`absolute flex flex-col overflow-hidden border border-white/[0.05] shadow-[0_0_0_1px_rgba(0,0,0,0.18)] ${panelCardRadius} ${panelCardBorder}`}
+          className={`absolute flex flex-col overflow-hidden border border-white/[0.05] ${panelCardRadius} ${panelCardBorder}`}
           style={{
             left: edge === 'right' ? CONTENT_INSET : 0,
             right: edge === 'left' ? CONTENT_INSET : 0,
