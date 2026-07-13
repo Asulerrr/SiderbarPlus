@@ -6,6 +6,7 @@ const panelMenuAPI: PanelMenuAPI = {
   getSiteInfo: (payload) => ipcRenderer.invoke(IPC_CHANNELS.panelsGetSiteInfo, payload),
   closeMenu: () => ipcRenderer.invoke(IPC_CHANNELS.panelsMenuClose),
   closeMenuAndResumeHover: () => ipcRenderer.invoke(IPC_CHANNELS.panelsMenuCloseAndResumeHover),
+  notifyHydrated: (renderId) => ipcRenderer.send(IPC_CHANNELS.panelMenuHydrated, renderId),
   onHydrate: (callback) => {
     const listener = (
       _event: Electron.IpcRendererEvent,

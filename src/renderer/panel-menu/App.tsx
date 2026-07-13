@@ -9,11 +9,11 @@ import {
   Smartphone,
   Trash2
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import type { PanelMenuOpenPayload, PanelMenuState } from '@shared/types';
+import { useEffect, useLayoutEffect, useState } from 'react';
+import type { PanelMenuHydratePayload, PanelMenuState } from '@shared/types';
 
 export default function App(): JSX.Element {
-  const [payload, setPayload] = useState<PanelMenuOpenPayload | null>(null);
+  const [payload, setPayload] = useState<PanelMenuHydratePayload | null>(null);
   const [state, setState] = useState<PanelMenuState | null>(null);
 
   useEffect(() => {
@@ -26,6 +26,20 @@ export default function App(): JSX.Element {
       disposeHydrate();
     };
   }, []);
+
+  useLayoutEffect(() => {
+    if (!payload) return;
+    let notifyTimer: ReturnType<typeof setTimeout> | null = null;
+    const paintedFrame = requestAnimationFrame(() => {
+      notifyTimer = setTimeout(() => {
+        window.panelMenuAPI.notifyHydrated(payload.renderId);
+      }, 0);
+    });
+    return () => {
+      cancelAnimationFrame(paintedFrame);
+      if (notifyTimer) clearTimeout(notifyTimer);
+    };
+  }, [payload]);
 
   const handleAction = async (
     action:
@@ -72,7 +86,7 @@ export default function App(): JSX.Element {
     <main
       className="min-h-screen bg-transparent p-0"
       onMouseLeave={() => {
-        void window.panelMenuAPI.closeMenu();
+        void window.panelMenuAPI.closeMenuAndResumeHover();
       }}
     >
       <div className="rounded-lg border border-white/8 bg-[#2D2D2D] p-1 shadow-[0_10px_30px_rgba(0,0,0,0.35)]">

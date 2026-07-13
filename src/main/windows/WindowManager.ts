@@ -93,7 +93,9 @@ export class WindowManager {
     this.dockWindow = new DockWindow(this.config);
     this.panelWindow = new PanelWindow(this.config);
     this.panelAnimationWindow = new PanelAnimationWindow(this.config);
-    this.panelMenuWindow = new PanelMenuWindow();
+    this.panelMenuWindow = new PanelMenuWindow(() => {
+      this.panelManager?.resumeHoverAfterMenuClose();
+    });
 
     this.dockWindow.create();
     this.hookExplorerRestart();

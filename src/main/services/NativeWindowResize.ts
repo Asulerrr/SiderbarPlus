@@ -2,6 +2,7 @@ import koffi from 'koffi';
 import { logger } from '../utils/logger';
 
 const WM_NCLBUTTONDOWN = 0x00a1;
+const VK_LBUTTON = 0x01;
 const HTLEFT = 10;
 const HTRIGHT = 11;
 const DWMWA_NCRENDERING_POLICY = 2;
@@ -16,6 +17,7 @@ interface User32Bindings {
   setCursorPos: (x: number, y: number) => number;
   releaseCapture: () => number;
   postMessage: (hwnd: bigint, message: number, wParam: number, lParam: bigint) => number;
+  getAsyncKeyState: (virtualKey: number) => number;
 }
 
 interface DwmApiBindings {
@@ -36,6 +38,9 @@ const loadUser32 = (): User32Bindings | null => {
       releaseCapture: lib.func('int __stdcall ReleaseCapture()') as never,
       postMessage: lib.func(
         'int __stdcall PostMessageW(uintptr_t hwnd, uint32 message, uintptr_t wParam, intptr_t lParam)'
+      ) as never,
+      getAsyncKeyState: lib.func(
+        'short __stdcall GetAsyncKeyState(int virtualKey)'
       ) as never
     };
   } catch (error) {
@@ -89,6 +94,9 @@ export const disableNativeWindowShadow = (nativeHandle: Buffer): boolean => {
     return false;
   }
 };
+
+export const isLeftMouseButtonDown = (): boolean =>
+  Boolean(user32 && (user32.getAsyncKeyState(VK_LBUTTON) & 0x8000));
 
 export const startNativeWindowResize = (
   nativeHandle: Buffer,

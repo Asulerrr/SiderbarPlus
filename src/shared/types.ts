@@ -147,6 +147,10 @@ export interface PanelMenuOpenPayload extends PanelMenuAnchor {
   state: PanelMenuState;
 }
 
+export interface PanelMenuHydratePayload extends PanelMenuOpenPayload {
+  renderId: number;
+}
+
 export interface PanelActionPayload {
   panelId: string;
 }

@@ -12,7 +12,7 @@ import type {
   PanelAnimatePayload,
   PanelChromePayload,
   PanelMenuActionPayload,
-  PanelMenuOpenPayload,
+  PanelMenuHydratePayload,
   PanelMenuState,
   PanelLoadingPayload,
   PanelNavigationPayload,
@@ -75,6 +75,7 @@ export const IPC_CHANNELS = {
   panelAnimationClose: 'panel-animation:close',
   panelAnimationReset: 'panel-animation:reset',
   panelMenuHydrate: 'panel-menu:hydrate',
+  panelMenuHydrated: 'panel-menu:hydrated',
   chromeFadeOut: 'chrome:fade-out',
   chromeFadeIn: 'chrome:fade-in',
   panelNavigationState: 'panel:navigation-state',
@@ -177,5 +178,6 @@ export interface PanelMenuAPI {
   getSiteInfo: (payload: PanelActionPayload) => Promise<IpcResult<SiteInfo>>;
   closeMenu: () => Promise<IpcResult<void>>;
   closeMenuAndResumeHover: () => Promise<IpcResult<void>>;
-  onHydrate: (callback: (payload: PanelMenuOpenPayload) => void) => () => void;
+  notifyHydrated: (renderId: number) => void;
+  onHydrate: (callback: (payload: PanelMenuHydratePayload) => void) => () => void;
 }

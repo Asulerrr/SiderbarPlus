@@ -526,7 +526,13 @@ export class PanelManager {
 
   closeMenuAndResumeHover(): void {
     this.closeMenu();
+    this.resumeHoverAfterMenuClose();
+  }
+
+  resumeHoverAfterMenuClose(): void {
+    if (this.panelMode !== 'hover') return;
     this.sticky = false;
+    this.cancelCloseTimer();
     this.pointerOutsideSince = null;
   }
 
