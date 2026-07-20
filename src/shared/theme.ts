@@ -38,6 +38,12 @@ export const getReadableForeground = (hex8: string): string => {
   return luminance > 128 ? '#1B1B1BE6' : '#FFFFFFE6';
 };
 
+export const getMutedForeground = (background: string): string => {
+  const { r, g, b } = parseHex8(background);
+  const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+  return luminance > 128 ? 'rgba(27,27,27,0.56)' : '#FFFFFF8F';
+};
+
 export const resolveSurfaceColors = (
   appearance: AppearanceConfig,
   nativeIsDark: boolean,

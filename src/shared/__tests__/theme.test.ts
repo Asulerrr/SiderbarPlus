@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   THEME_PRESETS,
+  getMutedForeground,
   getReadableForeground,
   parseHex8,
   resolveSurfaceColors,
@@ -26,6 +27,16 @@ describe('getReadableForeground', () => {
   });
   it('treats transparent bg as dark (returns light fg)', () => {
     assert.equal(getReadableForeground('#00000000'), '#FFFFFFE6');
+  });
+});
+
+describe('getMutedForeground', () => {
+  it('returns the panel muted color for dark backgrounds', () => {
+    assert.equal(getMutedForeground('#323232FF'), '#FFFFFF8F');
+  });
+
+  it('returns the panel muted color for light backgrounds', () => {
+    assert.equal(getMutedForeground('#F3F3F3FF'), 'rgba(27,27,27,0.56)');
   });
 });
 

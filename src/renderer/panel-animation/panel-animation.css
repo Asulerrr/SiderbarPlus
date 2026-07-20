@@ -13,6 +13,10 @@ body,
 
 body {
   user-select: none;
+  font-family:
+    'Segoe UI Variable Text', 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+  font-feature-settings: 'cv01', 'cv11';
+  -webkit-font-smoothing: antialiased;
 }
 
 .panel-animation-shell {

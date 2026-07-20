@@ -2,7 +2,7 @@ import { ChevronLeft } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PANEL_DEFAULT_WIDTH } from '@shared/constants';
 import { toRenderableIconUrl } from '@shared/iconUrl';
-import { resolveSurfaceColors } from '@shared/theme';
+import { getMutedForeground, resolveSurfaceColors } from '@shared/theme';
 import type {
   AppConfig,
   BrowserInfo,
@@ -177,6 +177,10 @@ export default function App(): JSX.Element {
     return (r * 0.299 + g * 0.587 + b * 0.114) > 128;
   }, [surface.bg]);
   const borderStyle = isLightBg ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.08)';
+  const mutedForeground = useMemo(
+    () => getMutedForeground(surface.bg),
+    [surface.bg]
+  );
   const colors = useMemo(() => {
     if (isLightBg) {
       return {
@@ -184,7 +188,7 @@ export default function App(): JSX.Element {
         footerBg: '#F5F5F5',
         inputBg: '#F9F9F9',
         text: '#1B1B1B',
-        mutedText: 'rgba(27,27,27,0.56)',
+        mutedText: mutedForeground,
         subtleBorder: 'rgba(0,0,0,0.10)',
         hoverBg: 'rgba(0,0,0,0.04)',
       };
@@ -194,11 +198,11 @@ export default function App(): JSX.Element {
       footerBg: '#1C1C1C',
       inputBg: 'transparent',
       text: surface.fg,
-      mutedText: '#FFFFFF8F',
+      mutedText: mutedForeground,
       subtleBorder: 'rgba(255,255,255,0.08)',
       hoverBg: 'rgba(255,255,255,0.04)',
     };
-  }, [isLightBg, surface.fg]);
+  }, [isLightBg, mutedForeground, surface.fg]);
 
   const loadConfig = async (): Promise<AppConfig | null> => {
     const result = await window.panelAPI.readConfig();

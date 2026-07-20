@@ -1,6 +1,6 @@
 import { ExternalLink, Minus, MoreHorizontal, PinOff, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { resolveSurfaceColors } from '@shared/theme';
+import { getMutedForeground, resolveSurfaceColors } from '@shared/theme';
 import type { AppConfig, PanelAnimationPayload } from '@shared/types';
 
 const CONTENT_INSET = 8;
@@ -18,6 +18,7 @@ export default function App(): JSX.Element {
   const [direction, setDirection] = useState<Direction>('opening');
   const [config, setConfig] = useState<AppConfig | null>(null);
   const timersRef = useRef<number[]>([]);
+  const transitionIdRef = useRef(0);
 
   useEffect(() => {
     let mounted = true;
@@ -46,18 +47,23 @@ export default function App(): JSX.Element {
 
     const startOpen = (nextPayload: PanelAnimationPayload): void => {
       clearTimers();
+      const transitionId = ++transitionIdRef.current;
       setPayload(nextPayload);
       setDirection('opening');
       setPhase('closed');
 
       const startTimer = window.setTimeout(() => {
+        if (transitionId !== transitionIdRef.current) return;
         window.requestAnimationFrame(() => {
+          if (transitionId !== transitionIdRef.current) return;
           window.requestAnimationFrame(() => {
+            if (transitionId !== transitionIdRef.current) return;
             setPhase('opening');
           });
         });
       }, 20);
       const finishTimer = window.setTimeout(() => {
+        if (transitionId !== transitionIdRef.current) return;
         setPhase('open');
       }, 320);
 
@@ -66,15 +72,18 @@ export default function App(): JSX.Element {
 
     const startClose = (nextPayload: PanelAnimationPayload): void => {
       clearTimers();
+      const transitionId = ++transitionIdRef.current;
       setPayload(nextPayload);
       setDirection('closing');
       setPhase('open');
 
       const startDelayMs = nextPayload.animationDelayMs ?? 20;
       const startTimer = window.setTimeout(() => {
+        if (transitionId !== transitionIdRef.current) return;
         setPhase('closing');
       }, startDelayMs);
       const finishTimer = window.setTimeout(() => {
+        if (transitionId !== transitionIdRef.current) return;
         setPhase('closed');
       }, startDelayMs + 300);
 
@@ -85,6 +94,7 @@ export default function App(): JSX.Element {
     const disposeClose = window.panelAnimationAPI.onClose(startClose);
     const disposeReset = window.panelAnimationAPI.onReset(() => {
       clearTimers();
+      ++transitionIdRef.current;
       setDirection('opening');
       setPhase('closed');
     });
@@ -94,6 +104,7 @@ export default function App(): JSX.Element {
       disposeClose();
       disposeReset();
       clearTimers();
+      ++transitionIdRef.current;
     };
   }, []);
 
@@ -109,6 +120,10 @@ export default function App(): JSX.Element {
   );
   const panelCardRadius = edge === 'right' ? 'rounded-l-lg' : 'rounded-r-lg';
   const panelCardBorder = edge === 'right' ? 'border-r-0' : 'border-l-0';
+  const mutedForeground = useMemo(
+    () => getMutedForeground(surface.bg),
+    [surface.bg]
+  );
   const closedTransform =
     edge === 'right' ? 'translateX(100%) translateZ(0)' : 'translateX(-100%) translateZ(0)';
   const transform =
@@ -138,10 +153,16 @@ export default function App(): JSX.Element {
         >
           <div className="flex h-[76px] shrink-0 items-center justify-between px-4" style={{ backgroundColor: surface.bg }}>
             <div className="flex min-w-0 flex-1 flex-col justify-center gap-1 pr-3">
-              <div className="min-w-0 truncate text-[15px] font-semibold leading-5 text-white">
+              <div
+                className="min-w-0 truncate text-[15px] font-semibold leading-5"
+                style={{ color: surface.fg }}
+              >
                 {payload?.descriptor.title ?? 'SideBar'}
               </div>
-              <div className="min-w-0 truncate text-xs leading-4 text-white/42">
+              <div
+                className="min-w-0 truncate text-xs leading-4"
+                style={{ color: mutedForeground }}
+              >
                 {payload?.url || '正在准备面板...'}
               </div>
             </div>

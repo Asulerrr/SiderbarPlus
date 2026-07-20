@@ -10,6 +10,7 @@ import type {
   SiteInfo,
   WebPanelConfig
 } from '../../shared/types';
+import { IPC_CHANNELS } from '../../shared/ipc-contracts';
 import { BrowserService } from '../services/BrowserService';
 import { logger } from '../utils/logger';
 import { buildNavigationFailurePageUrl } from './navigationFailurePage';
@@ -39,9 +40,11 @@ interface NavigationFailureState {
 const MAX_CACHED_VIEWS = 8;
 const NAVIGATION_TIMEOUT_MS = 15_000;
 const NAVIGATION_TIMEOUT_ERROR_CODE = -118;
+const PRESENTATION_FRAME_TIMEOUT_MS = 300;
 
 export class WebPanelHost {
   private readonly views = new Map<string, BrowserView>();
+  private nextPresentationRequestId = 0;
   private readonly meta = new Map<string, ViewMeta>();
   private readonly partitions = new Map<string, string>();
   // LRU order: most-recently-used last
@@ -364,6 +367,53 @@ export class WebPanelHost {
     }
 
     return this.views.get(panelId) ?? null;
+  }
+
+  waitForPresentationFrame(panelId: string): Promise<boolean> {
+    const view = this.getView(panelId);
+    if (!view || view.webContents.isDestroyed()) {
+      return Promise.resolve(false);
+    }
+
+    const requestId = ++this.nextPresentationRequestId;
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (presented: boolean): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        ipcMain.removeListener(
+          IPC_CHANNELS.panelViewPresentationReady,
+          handleReady
+        );
+        resolve(presented);
+      };
+      const handleReady = (
+        event: Electron.IpcMainEvent,
+        readyRequestId: number
+      ): void => {
+        if (
+          event.sender !== view.webContents ||
+          readyRequestId !== requestId
+        ) {
+          return;
+        }
+        finish(true);
+      };
+      const timeout = setTimeout(
+        () => finish(false),
+        PRESENTATION_FRAME_TIMEOUT_MS
+      );
+      timeout.unref();
+      ipcMain.on(
+        IPC_CHANNELS.panelViewPresentationReady,
+        handleReady
+      );
+      view.webContents.send(
+        IPC_CHANNELS.panelViewPresentationRequest,
+        requestId
+      );
+    });
   }
 
   getCurrentUrl(panelId: string | null, fallbackUrl: string): string {

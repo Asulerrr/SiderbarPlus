@@ -96,11 +96,11 @@ test('autonomous menu dismissal restores panel hover behavior', async () => {
 
   assert.match(
     windowManagerSource,
-    /new PanelMenuWindow\(\(\) => \{\s+this\.panelManager\?\.resumeHoverAfterMenuClose\(\)/
+    /new PanelMenuWindow\(\(\) => \{\s+this\.panelManager\?\.resumeHover\(\)/
   );
   assert.match(
     panelManagerSource,
-    /resumeHoverAfterMenuClose\(\): void \{[\s\S]*?this\.sticky = false/
+    /resumeHover\(\): void \{[\s\S]*?this\.sticky = false/
   );
   assert.match(
     rendererSource,

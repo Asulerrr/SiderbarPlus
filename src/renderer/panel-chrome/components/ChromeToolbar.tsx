@@ -31,6 +31,7 @@ export function ChromeToolbar({
         type="button"
         title="在浏览器中打开"
         className={`flex h-8 w-8 items-center justify-center rounded text-white/72 hover:bg-white/30 ${webOnly}`}
+        onMouseDown={(event) => event.stopPropagation()}
         onClick={() => {
           if (panelId && panelType === 'web') {
             void window.panelAPI.openExternal({ panelId });

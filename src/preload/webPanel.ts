@@ -6,6 +6,20 @@ import { IPC_CHANNELS } from '../shared/ipc-contracts';
 webFrame.insertCSS('*,*::before,*::after,a,button,input,textarea,select,[role=button],[onclick]{cursor:default!important}');
 
 let lastCancelAt = 0;
+let latestPresentationRequestId = 0;
+
+ipcRenderer.on(
+  IPC_CHANNELS.panelViewPresentationRequest,
+  (_event, requestId: number) => {
+    latestPresentationRequestId = requestId;
+    window.requestAnimationFrame(() => {
+      window.setTimeout(() => {
+        if (requestId !== latestPresentationRequestId) return;
+        ipcRenderer.send(IPC_CHANNELS.panelViewPresentationReady, requestId);
+      }, 0);
+    });
+  }
+);
 
 const cancelHide = (): void => {
   const now = Date.now();

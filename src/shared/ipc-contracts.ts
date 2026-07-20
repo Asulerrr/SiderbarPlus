@@ -74,6 +74,8 @@ export const IPC_CHANNELS = {
   panelAnimationOpen: 'panel-animation:open',
   panelAnimationClose: 'panel-animation:close',
   panelAnimationReset: 'panel-animation:reset',
+  panelViewPresentationRequest: 'panel-view:presentation-request',
+  panelViewPresentationReady: 'panel-view:presentation-ready',
   panelMenuHydrate: 'panel-menu:hydrate',
   panelMenuHydrated: 'panel-menu:hydrated',
   chromeFadeOut: 'chrome:fade-out',

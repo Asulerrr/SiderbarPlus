@@ -35,8 +35,11 @@ const OPEN_ANIMATION_MS = 340;
 const CLOSE_ANIMATION_MS = 280;
 const SNAPSHOT_PAINT_MS = 50;
 const OPEN_HANDOFF_PAINT_MS = 64;
+const PRESENTATION_COMPOSITOR_SETTLE_MS = 16;
 const CLOSE_ANIMATION_DELAY_MS = 70;
 const CLOSE_HANDOFF_PAINT_MS = 50;
+const CLOSE_REMAINING_ANIMATION_MS =
+  CLOSE_ANIMATION_DELAY_MS - CLOSE_HANDOFF_PAINT_MS + CLOSE_ANIMATION_MS;
 const CONTENT_INSET = 8;
 const PANEL_TOP_INSET = 8;
 const PANEL_BORDER_WIDTH = 1;
@@ -224,7 +227,12 @@ export class PanelManager {
     // first visible frames. Revealing both in the same tick exposes stale pixels.
     this.panelWindow.show();
     this.coverPanelWithAnimation();
-    await sleep(OPEN_HANDOFF_PAINT_MS);
+    if (descriptor.type === 'web') {
+      await this.webPanelHost.waitForPresentationFrame(descriptor.id);
+      await sleep(PRESENTATION_COMPOSITOR_SETTLE_MS);
+    } else {
+      await sleep(OPEN_HANDOFF_PAINT_MS);
+    }
     if (
       token !== this.lifecycleToken ||
       this.state !== 'opening' ||
@@ -323,6 +331,7 @@ export class PanelManager {
 
     this.cancelActiveResize();
     this.cancelCloseTimer();
+    this.stopPointerTracking();
     this.closeMenu();
     ++this.showPanelToken;
     ++this.switchToken;
@@ -396,7 +405,7 @@ export class PanelManager {
       currentView.setBounds({ x: 0, y: 0, width: 0, height: 0 });
     }
 
-    await sleep(CLOSE_ANIMATION_MS);
+    await sleep(CLOSE_REMAINING_ANIMATION_MS);
     if (
       token !== this.lifecycleToken ||
       this.state !== 'closing' ||
@@ -407,7 +416,6 @@ export class PanelManager {
 
     this.panelWindowRef.setIgnoreMouseEvents(true, { forward: true });
     this.hideAnimationWindow();
-    this.stopPointerTracking();
     this.clearPresentedPanel();
 
     if (this.pendingDestroyId) {
@@ -493,7 +501,11 @@ export class PanelManager {
   }
 
   async openExternal(panelId: string, url?: string): Promise<void> {
-    await this.webPanelHost.openExternal(panelId, url);
+    try {
+      await this.webPanelHost.openExternal(panelId, url);
+    } finally {
+      this.resumeHover();
+    }
   }
 
   async goBack(panelId: string): Promise<void> {
@@ -526,10 +538,10 @@ export class PanelManager {
 
   closeMenuAndResumeHover(): void {
     this.closeMenu();
-    this.resumeHoverAfterMenuClose();
+    this.resumeHover();
   }
 
-  resumeHoverAfterMenuClose(): void {
+  resumeHover(): void {
     if (this.panelMode !== 'hover') return;
     this.sticky = false;
     this.cancelCloseTimer();
@@ -736,6 +748,15 @@ export class PanelManager {
 
     if (descriptor.type === 'web') {
       this.webPanelHost.applyMuteState(descriptor.id, false);
+      await this.webPanelHost.waitForPresentationFrame(descriptor.id);
+      await sleep(PRESENTATION_COMPOSITOR_SETTLE_MS);
+      if (
+        token !== this.switchToken ||
+        this.currentPanelId !== descriptor.id ||
+        this.presentedPanelId !== descriptor.id
+      ) {
+        return;
+      }
     }
 
     this.panelWindowRef.webContents.send(IPC_CHANNELS.chromeFadeIn, {
@@ -1052,7 +1073,7 @@ export class PanelManager {
 
     view.setBounds({
       x: sideInsetLeft + leftBorderWidth,
-      y: PANEL_TOP_INSET + CHROME_HEIGHT,
+      y: PANEL_TOP_INSET + PANEL_BORDER_WIDTH + CHROME_HEIGHT,
       width: Math.max(0, innerWidth - leftBorderWidth - rightBorderWidth),
       height: Math.max(
         0,
@@ -1060,7 +1081,7 @@ export class PanelManager {
           PANEL_TOP_INSET -
           CHROME_HEIGHT -
           CONTENT_INSET -
-          PANEL_BORDER_WIDTH
+          PANEL_BORDER_WIDTH * 2
       )
     });
   }
